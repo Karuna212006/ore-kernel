@@ -109,6 +109,17 @@ impl Pager {
         None
     }
 
+    pub fn get_kv_cache_size_mb(app_id: &str, model_name: &str) -> u32 {
+        let safe_model = model_name.replace(":", "-");
+        let path = format!("{}/{}_{}.safetensors", Self::SWAP_DIR, app_id, safe_model);
+
+        if let Ok(metadata) = fs::metadata(&path) {
+            (metadata.len() / (1024 * 1024)) as u32
+        } else {
+            0
+        }
+    }
+
     /// Wipe the memory clean
     pub fn clear_page(app_id: &str) {
         let _ = fs::remove_file(format!("{}/{}.json", Self::SWAP_DIR, app_id));
@@ -125,5 +136,17 @@ impl Pager {
         }
         
         println!("-> [PAGER] Completely wiped all swap files for Agent '{}'", app_id);
+    }
+
+    pub fn delete_kv_cache(app_id: &str) {
+        if let Ok(entries) = fs::read_dir(Self::SWAP_DIR) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                if file_name.starts_with(&format!("{}_", app_id)) && file_name.ends_with(".safetensors") {
+                    let _ = fs::remove_file(entry.path());
+                    println!("-> [PAGER] Deleted stale KV-Cache for '{}' (Memory Compaction).", app_id);
+                }
+            }
+        }
     }
 }

@@ -39,7 +39,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
     };
 
     let mut current_context = None;
-    if manifest.resources.stateful_paging {
+    if manifest.resources.json_history {
         current_context = Some(Pager::page_in_history(app_id));
     }
 
@@ -82,7 +82,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
         full_response.push_str(&word);
     }
 
-    if manifest.resources.stateful_paging {
+    if manifest.resources.json_history {
         let mut new_history = current_context.unwrap_or_default();
         new_history.push(ore_core::swap::ContextMessage {
             role: "user".to_string(),
@@ -92,7 +92,100 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
             role: "assistant".to_string(),
             content: full_response.clone(),
         });
-        Pager::page_out_history(app_id, &new_history);
+
+        let total_chars: usize = new_history.iter().map(|m| m.content.len()).sum();
+        let estimated_tokens = (total_chars / 4) as u32;
+        let token_limit = manifest.memory_limits.max_json_tokens;
+        let token_cap_hit = estimated_tokens > token_limit;
+
+        // CALCULATE PHYSICAL VRAM/SSD USAGE
+        let mut kv_cap_hit = false;
+        if manifest.resources.stateful_paging && manifest.memory_limits.max_kv_cache_mb > 0 {
+            let current_kv_mb = Pager::get_kv_cache_size_mb(app_id, target_model);
+            kv_cap_hit = current_kv_mb > manifest.memory_limits.max_kv_cache_mb;
+        }
+
+        if token_cap_hit || kv_cap_hit {
+            if manifest.memory_limits.auto_summarize_on_cap {
+                println!("-> [KERNEL] Agent '{}' memory cap reached ({} > {} tokens). Triggering Background Compaction...", app_id, estimated_tokens, token_limit);
+
+                // Clone variables for the background thread so the user gets their response instantly
+                let history_to_compress = new_history.clone();
+                let m_id = app_id.to_string();
+                let driver_clone = Arc::clone(&state.driver);
+                let scheduler_clone = Arc::clone(&state.scheduler);
+                let model_to_use = target_model.to_string();
+
+                tokio::spawn(async move {
+                    let text_to_summarize = history_to_compress.iter()
+                        .map(|m| format!("{}: {}", m.role, m.content))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    
+                    let summary_prompt = format!(
+                        "Summarize the following conversation history densely, preserving key facts, decisions, and context:\n\n{}", 
+                        text_to_summarize
+                    );
+
+                    // Grab the GPU Lock to do the heavy compression
+                    let lease = scheduler_clone.request_gpu(&model_to_use).await;
+                    println!("-> [COMPACTION] GPU Lease acquired for background summarization.");
+                    
+                    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+                    let m_clone = model_to_use.clone();
+                    let app_clone = m_id.clone();
+
+                    tokio::spawn(async move {
+                        // We set stateful_paging = false here so the summarizer does not enter an infinite loop!
+                        let _ = driver_clone.generate_text(&m_clone, &app_clone, false, &summary_prompt, None, tx).await;
+                    });
+                    
+                    let mut summary = String::new();
+                    while let Some(word) = rx.recv().await {
+                        summary.push_str(&word);
+                    }
+                    
+                    drop(lease); // Release the GPU
+                    
+                    // REWRITE THE BRAIN
+                    let mut compacted_history = Vec::new();
+                    compacted_history.push(ore_core::swap::ContextMessage {
+                        role: "system".to_string(),
+                        content: format!("Previous context summary: {}", summary),
+                    });
+                    
+                    // Keep the last 2 messages so the conversation flow isn't jarring to the user
+                    if history_to_compress.len() >= 2 {
+                        let len = history_to_compress.len();
+                        compacted_history.push(history_to_compress[len - 2].clone());
+                        compacted_history.push(history_to_compress[len - 1].clone());
+                    }
+
+                    // Save the tiny, highly-dense memory back to the SSD
+                    Pager::page_out_history(&m_id, &compacted_history);
+                    
+                    // CRITICAL: We must delete the old .safetensors KV-cache because the sequence of tokens just fundamentally changed!
+                    if manifest.resources.stateful_paging {
+                        Pager::delete_kv_cache(&m_id);
+                        println!("-> [COMPACTION] KV-Cache invalidated and erased from disk.");
+                    }
+                    println!("-> [COMPACTION] Memory compressed successfully. VRAM footprint reset to 0.");
+                });
+                
+            } else {
+                // If auto_summarize is OFF, we use brutal FIFO pruning
+                println!("-> [KERNEL] Agent '{}' memory cap reached. Pruning oldest messages (FIFO)...", app_id);
+                while new_history.iter().map(|m| m.content.len()).sum::<usize>() / 4 > token_limit as usize && new_history.len() > 2 {
+                    new_history.remove(0);
+                }
+                Pager::page_out_history(app_id, &new_history);
+                if manifest.resources.stateful_paging {
+                    Pager::delete_kv_cache(app_id);
+                }
+            }
+        } else {
+            Pager::page_out_history(app_id, &new_history);
+        }
     }
 
     full_response
