@@ -90,12 +90,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(shared_state.clone());
 
     let gc_bus = shared_state.semantic_bus.clone();
+    let gc_driver = shared_state.driver.clone();
+    
+    // Background GC Loop
     tokio::spawn(async move {
+        let mut tick_count = 0;
         loop {
-            // Wake up every 1 hour (3600 seconds)
-            tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
-            kprintln!("-> [SYSTEM] Running routine memory Garbage Collection...");
-            gc_bus.run_garbage_collection();
+            // Wake up every 1 minute
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            
+            // 1. Flush agents idle for > 5 minutes
+            let _ = gc_driver.flush_idle_memory(5).await; 
+            
+            tick_count += 1;
+            // 2. Run Semantic Bus GC every 60 minutes
+            if tick_count >= 60 {
+                println!("-> [SYSTEM] Running routine Semantic Memory GC...");
+                gc_bus.run_garbage_collection();
+                tick_count = 0;
+            }
         }
     });
 

@@ -85,8 +85,8 @@ def main():
         "Modern hypervisors use similar concepts for managing virtual machines. "
         "Rust adds another layer of complexity by enforcing strict ownership rules at compile-time, "
         "meaning the memory is managed without a garbage collector. "
-        "By the way, amidst all this technical discussion, do not forget my secret code is 8842 and I still love pizza. "
         "Anyway, back to systems architecture. To achieve low latency context switching, "
+        "By the way, amidst all this technical discussion, do not forget my secret code is 8842 and I still love pizza. "
         "an OS must minimize the time it takes to move state between disk and compute. "
         "This is similar to how AI models manage KV-Caches, storing the attention matrices so they "
         "don't have to recompute past tokens. Please acknowledge you received this history lesson."
@@ -98,12 +98,8 @@ def main():
     
     print(f"    AI: {res6.strip()}")
     print(f"    Latency (Processing Flood): {end_time - start_time:.2f} seconds")
-    print("    [!] Flood complete. Check the ORE Server Terminal for the [COMPACTION] logs!\n")
+    print("    [!] Flood complete. Check the ORE Server Terminal for the logs!\n")
 
-    # 6. POST-COMPACTION RECALL
-    # print("[*] TEST 4: The 'Rebirth' ( Recall)")
-    # print("    Waiting 5 seconds for the background compaction thread to finish summarizing...\n")
-    # time.sleep(5) 
     
     print("    Prompt: 'What is my favorite food again?'")
     start_time = time.time()
@@ -111,7 +107,7 @@ def main():
     end_time = time.time()
     
     print(f"    AI: {res7.strip()}")
-    print(f"    Latency (Post-Compaction Cold Start): {end_time - start_time:.2f} seconds\n")
+    print(f"    Latency (Cold Start): {end_time - start_time:.2f} seconds\n")
 
     print("==================================================")
     print("  STRESS TEST COMPLETE")

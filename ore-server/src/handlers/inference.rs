@@ -50,7 +50,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
         .unwrap_or("llama3.2:1b");
 
     // the GPU scheduler
-    let lease = state.scheduler.request_gpu(target_model).await;
+    let lease = state.scheduler.request_gpu(target_model, app_id).await;
     kprintln!(
         "-> GPU Lease Granted for '{}'. Routing to Driver...",
         lease.model
@@ -136,16 +136,17 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     );
 
                     // Grab the GPU Lock to do the heavy compression
-                    let lease = scheduler_clone.request_gpu(&model_to_use).await;
+                    let lease = scheduler_clone.request_gpu(&model_to_use, app_id).await;
                     kprintln!("-> [COMPACTION] GPU Lease acquired for background summarization.");
                     
                     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-                    let m_clone = model_to_use.clone();
-                    let app_clone = m_id.clone();
+                    let inner_driver = Arc::clone(&driver_clone);
+                    let inner_model = model_to_use.clone();
+                    let inner_app_id = m_id.clone();
 
                     tokio::spawn(async move {
                         // We set stateful_paging = false here so the summarizer does not enter an infinite loop!
-                        let _ = driver_clone.generate_text(&m_clone, &app_clone, false, &summary_prompt, None, tx).await;
+                        let _ = inner_driver.generate_text(&inner_model, &inner_app_id, false, &summary_prompt, None, tx).await;
                     });
                     
                     let mut summary = String::new();
@@ -198,6 +199,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     // CRITICAL: We must delete the old .safetensors KV-cache because the sequence of tokens just fundamentally changed!
                     if manifest.resources.stateful_paging {
                         Pager::delete_kv_cache(&m_id);
+                        let _ = driver_clone.invalidate_agent_cache(&m_id).await;
                         kprintln!("-> [COMPACTION] KV-Cache invalidated and erased from disk.");
                     }
                     kprintln!("-> [COMPACTION] Memory compressed successfully. VRAM footprint reset to 0.");
@@ -266,7 +268,7 @@ pub async fn run_process(
     kprintln!("-> Waiting for GPU Scheduler...");
 
     // request a GPU lease for the specified model
-    let lease = state.scheduler.request_gpu(&payload.model).await;
+    let lease = state.scheduler.request_gpu(&payload.model, app_id).await;
     kprintln!(
         "-> GPU Lease Granted. Executing natively via {}...",
         state.driver.engine_name()
@@ -356,16 +358,16 @@ pub async fn run_process(
                         text_to_summarize
                     );
 
-                    let comp_lease = scheduler_clone.request_gpu(&model_name).await;
+                    let comp_lease = scheduler_clone.request_gpu(&model_name, app_id).await;
                     kprintln!("-> [COMPACTION] GPU Lease acquired for background summarization.");
                     
                     let (tx_comp, mut rx_comp) = tokio::sync::mpsc::unbounded_channel::<String>();
-                    let d_clone = Arc::clone(&driver);
-                    let m_clone = model_name.clone();
-                    let app_clone = app_id_str.clone();
+                    let inner_driver = Arc::clone(&driver);
+                    let inner_model = model_name.clone();
+                    let inner_app_id = app_id_str.clone();
                     
                     tokio::spawn(async move {
-                        let _ = d_clone.generate_text(&m_clone, &app_clone, false, &summary_prompt, None, tx_comp).await;
+                        let _ = inner_driver.generate_text(&inner_model, &inner_app_id, false, &summary_prompt, None, tx_comp).await;
                     });
                     
                     let mut summary = String::new();
@@ -414,6 +416,7 @@ pub async fn run_process(
                     
                     if is_stateful {
                         Pager::delete_kv_cache(&app_id_str);
+                        let _ = driver.invalidate_agent_cache(&app_id_str).await;
                         kprintln!("-> [COMPACTION] KV-Cache invalidated. VRAM Footprint reset to 0MB.");
                     }
                 } else {

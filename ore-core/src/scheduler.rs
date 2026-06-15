@@ -9,6 +9,7 @@ pub struct GpuScheduler {
 /// Tracks what is currently physically loaded in VRAM.
 struct GpuState {
     active_model: Option<String>,
+    active_app_id: Option<String>,
     active_users: u32,
 }
 
@@ -24,12 +25,13 @@ impl GpuScheduler {
             execution_lock: Arc::new(Semaphore::new(1)),
             state: Mutex::new(GpuState {
                 active_model: None,
+                active_app_id: None,
                 active_users: 0,
             }),
         }
     }
 
-    pub async fn request_gpu(&self, requested_model: &str) -> GpuLease {
+    pub async fn request_gpu(&self, requested_model: &str, app_id: &str) -> GpuLease {
         let permit = Arc::clone(&self.execution_lock)
             .acquire_owned()
             .await
@@ -38,27 +40,42 @@ impl GpuScheduler {
         // 2. Check the Memory Map (What's in VRAM?)
         let mut state = self.state.lock().await;
 
-        let is_hot_swap = state.active_model.as_ref() == Some(&requested_model.to_string());
+        let is_same_model = state.active_model.as_deref() == Some(requested_model);
+        let is_same_agent = state.active_app_id.as_deref() == Some(app_id);
 
-        if is_hot_swap {
-            kprintln!(
-                "-> [SCHEDULER] Shared Memory Hit! '{}' is already hot.",
-                requested_model
+        if is_same_model && is_same_agent {
+            // [TIER 1] PERFECT HIT
+            println!(
+                "-> [SCHEDULER] Hot Hit! '{}' for Agent '{}' is already active.",
+                requested_model, app_id
             );
             state.active_users += 1;
+            
+        } else if is_same_model && !is_same_agent {
+            // [TIER 2] AGENT SWAP (The Massive Optimization)
+            let old_agent = state.active_app_id.clone().unwrap_or_else(|| "Unknown".to_string());
+            println!(
+                "-> [SCHEDULER] Agent Swap: Retaining '{}' weights. Evicting '{}' KV-Cache -> Injecting '{}'.",
+                requested_model, old_agent, app_id
+            );
+            state.active_app_id = Some(app_id.to_string());
+            state.active_users = 1;
+            
         } else {
-            if let Some(old) = &state.active_model {
-                kprintln!(
-                    "-> [SCHEDULER] Context Switch: Evicting '{}' -> Loading '{}'",
-                    old, requested_model
+            // [TIER 3] MODEL SWAP (Cold Start)
+            if let Some(old_model) = &state.active_model {
+                println!(
+                    "-> [SCHEDULER] Model Swap: Evicting '{}' -> Loading '{}' for '{}'",
+                    old_model, requested_model, app_id
                 );
             } else {
-                kprintln!(
-                    "-> [SCHEDULER] Cold Start: Loading '{}' into VRAM.",
-                    requested_model
+                println!(
+                    "-> [SCHEDULER] Cold Start: Loading '{}' into VRAM for '{}'.",
+                    requested_model, app_id
                 );
             }
             state.active_model = Some(requested_model.to_string());
+            state.active_app_id = Some(app_id.to_string());
             state.active_users = 1;
         }
 

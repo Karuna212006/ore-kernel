@@ -301,4 +301,15 @@ impl InferenceDriver for OllamaDriver {
 
         Ok(data.embeddings)
     }
+
+    async fn flush_idle_memory(&self, _idle_timeout_mins: u64) -> Result<(), DriverError> {
+        Ok(()) // Ollama handles its own eviction, so the ORE proxy just passes.
+    }
+
+    async fn invalidate_agent_cache(&self, _app_id: &str) -> Result<(), DriverError> {
+        // Ollama is stateless between requests unless we pass the context array,
+        // so we don't need to surgically wipe its RAM. ORE handles this by simply 
+        // not passing the old context array next time!
+        Ok(())
+    }
 }

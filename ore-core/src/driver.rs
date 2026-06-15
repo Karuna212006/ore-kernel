@@ -62,4 +62,8 @@ pub trait InferenceDriver: Send + Sync {
         model: &str,
         inputs: Vec<String>,
     ) -> Result<Vec<Vec<f32>>, DriverError>;
+
+    async fn flush_idle_memory(&self, idle_timeout_mins: u64) -> Result<(), DriverError>;
+
+    async fn invalidate_agent_cache(&self, app_id: &str) -> Result<(), DriverError>;
 }

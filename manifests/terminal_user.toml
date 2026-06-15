@@ -9,6 +9,13 @@ enforce_pii_redaction = true
 allowed_models = ["llama3.2:1b"]
 max_tokens_per_minute = 10000
 gpu_priority = "normal"
+json_history = true
+stateful_paging = true
+
+[memory_limits]
+max_json_tokens = 4024
+max_kv_cache_mb = 1024
+auto_summarize_on_cap = true
 
 [network]
 network_enabled = true

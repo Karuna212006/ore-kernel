@@ -148,12 +148,15 @@ pub struct ActiveEngine {
     pub logits_processor: LogitsProcessor,
     pub model_name: String,
     pub config: ModelConfig,
+    pub current_app_id: String,     
+    pub stateful_paging: bool,      
+    pub last_used: std::time::Instant,
     pub _mmap: memmap2::Mmap,
 }
 
 impl ActiveEngine {
     /// The ultra-fast, zero-copy GGUF loader using OS-level memory mapping (mmap)
-    pub fn load(model_name: &str, device: &Device) -> Result<Self> {
+    pub fn load(model_name: &str, app_id: &str, stateful_paging: bool, device: &Device) -> Result<Self> {
         let safe_folder_name = model_name.replace(":", "-");
         let model_dir = Path::new("../models").join(&safe_folder_name);
         let gguf_path = model_dir.join("model.gguf");
@@ -261,6 +264,9 @@ impl ActiveEngine {
             logits_processor,
             model_name: model_name.to_string(),
             config,
+            current_app_id: app_id.to_string(),
+            stateful_paging,
+            last_used: std::time::Instant::now(),
             _mmap: mmap,
         })
     }
