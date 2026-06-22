@@ -347,12 +347,42 @@ async fn main() {
                         println!();
 
                         let mut stream = response.bytes_stream();
+
+                        let mut is_thinking = false;
+
                         while let Some(chunk) = stream.next().await {
                             if let Ok(bytes) = chunk {
-                                let text = String::from_utf8_lossy(&bytes);
+                                let text = String::from_utf8_lossy(&bytes).to_string();
                                 if text.starts_with("ORE KERNEL ALERT") {
                                     print!("{}", text.red().bold());
+                                    continue;
+                                } 
+                                
+                                // Check for Thinking Tags - Thinking machine handling internal monologue vs final answer rendering
+                                if text.contains("<think>") {
+                                    is_thinking = true;
+                                    print!("\n{} ", "[Thinking...]".bright_black().italic());
+                                    let clean = text.replace("<think>", "");
+                                    print!("{}", clean.bright_black().italic());
+                                    std::io::stdout().flush().unwrap();
+                                    continue;
+                                }
+
+                                if text.contains("</think>") {
+                                    is_thinking = false;
+                                    let clean = text.replace("</think>", "");
+                                    print!("{}", clean.bright_black().italic());
+                                    print!("\n\n{} ", "[Answer]".blue().bold());
+                                    std::io::stdout().flush().unwrap();
+                                    continue;
+                                }
+
+                                // Render the text based on the current state
+                                if is_thinking {
+                                    // Dim gray and italic for the internal monologue
+                                    print!("{}", text.bright_black().italic());
                                 } else {
+                                    // Bright blue for the final answer
                                     print!("{}", text.blue());
                                 }
                                 std::io::stdout().flush().unwrap();

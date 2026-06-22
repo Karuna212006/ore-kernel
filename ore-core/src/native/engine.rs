@@ -1,7 +1,7 @@
 use crate::native::gguf_tokenizer::TokenizerFromGguf;
 use crate::native::models;
 use crate::native::models::llama::ModelWeights as LlamaModel;
-use crate::native::models::qwen2::ModelWeights as Qwen2Model;
+use crate::native::models::qwen::ModelWeights as QwenModel;
 use crate::swap::ContextMessage;
 use anyhow::{Error as E, Result};
 use candle_core::quantized::gguf_file;
@@ -15,14 +15,14 @@ use tokenizers::Tokenizer;
 
 // Supports multiple architectures
 pub enum OreEngine {
-    Qwen2(Qwen2Model),
+    Qwen(QwenModel),
     Llama(LlamaModel),
 }
 
 impl OreEngine {
     pub fn forward(&mut self, input: &Tensor, start_pos: usize) -> Result<Tensor> {
         match self {
-            OreEngine::Qwen2(m) => m.forward(input, start_pos).map_err(E::msg),
+            OreEngine::Qwen(m) => m.forward(input, start_pos).map_err(E::msg),
             OreEngine::Llama(m) => m.forward(input, start_pos).map_err(E::msg),
         }
 
@@ -45,7 +45,7 @@ impl OreEngine {
     pub fn num_layers(&self) -> usize {
         match self {
             OreEngine::Llama(m) => m.layers.len(),
-            OreEngine::Qwen2(m) => m.layers.len(),
+            OreEngine::Qwen(m) => m.layers.len(),
         }
     }
 
@@ -56,7 +56,7 @@ impl OreEngine {
                     layer.kv_cache = None;
                 }
             }
-            OreEngine::Qwen2(m) => {
+            OreEngine::Qwen(m) => {
                 for layer in m.layers.iter_mut() {
                     layer.kv_cache = None;
                 }
@@ -80,7 +80,7 @@ impl OreEngine {
                     }
                 }
             }
-            OreEngine::Qwen2(m) => {
+            OreEngine::Qwen(m) => {
                 for layer in m.layers.iter_mut() {
                     if let Some((k, v)) = layer.kv_cache.as_ref() {
                         if k.dim(2).unwrap_or(0) > len {
@@ -100,7 +100,7 @@ impl OreEngine {
         // Look at Layer 0's Key tensor. The 3rd dimension is usually the sequence length.
         let first_layer_cache = match self {
             OreEngine::Llama(m) => m.layers[0].kv_cache.as_ref(),
-            OreEngine::Qwen2(m) => m.layers[0].kv_cache.as_ref(),
+            OreEngine::Qwen(m) => m.layers[0].kv_cache.as_ref(),
         };
 
         if let Some((k, _v)) = first_layer_cache {
@@ -114,7 +114,7 @@ impl OreEngine {
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
         match self {
             OreEngine::Llama(m) => m.layers.iter().map(|l| l.kv_cache.clone()).collect(),
-            OreEngine::Qwen2(m) => m.layers.iter().map(|l| l.kv_cache.clone()).collect(),
+            OreEngine::Qwen(m) => m.layers.iter().map(|l| l.kv_cache.clone()).collect(),
         }
     }
 
@@ -126,7 +126,7 @@ impl OreEngine {
                     layer.kv_cache = saved_cache;
                 }
             }
-            OreEngine::Qwen2(m) => {
+            OreEngine::Qwen(m) => {
                 for (layer, saved_cache) in m.layers.iter_mut().zip(cache.into_iter()) {
                     layer.kv_cache = saved_cache;
                 }
@@ -188,47 +188,10 @@ impl ActiveEngine {
         };
         kprintln!("-> [CANDLE] Detected Architecture: '{}'", arch_name);
 
-        // 3. Tokenizer Resolution
-        let global_tokenizer_name = if model_name.to_lowercase().contains("qwen2.5") {
-            "qwen2.5"
-        } else if model_name.to_lowercase().contains("llama4")
-            || model_name.to_lowercase().contains("llama-4")
-        {
-            "llama4"
-        } else if model_name.to_lowercase().contains("llama3.3")
-            || model_name.to_lowercase().contains("llama-3.3")
-        {
-            "llama3.3"
-        } else if model_name.to_lowercase().contains("llama3.2")
-            || model_name.to_lowercase().contains("llama3")
-            || model_name.to_lowercase().contains("llama-3.2")
-            || model_name.to_lowercase().contains("llama-3")
-        {
-            "llama3.2"
-        } else if model_name.to_lowercase().contains("llama2")
-            || model_name.to_lowercase().contains("llama-2")
-        {
-            "llama2"
-        } else if model_name.to_lowercase().contains("codellama") {
-            "codellama"
-        } else if model_name.to_lowercase().contains("gemma") {
-            "gemma"
-        } else {
-            arch_name.as_str()
-        };
-
-        let global_path = format!("../tokenizers/{}.json", global_tokenizer_name);
-
         // universal tokenizer fallback
         let tokenizer = if Path::new(&local_tokenizer_path).exists() {
             kprintln!("-> [CANDLE] Using Local Dictionary...");
             Tokenizer::from_file(&local_tokenizer_path).map_err(E::msg)?
-        } else if Path::new(&global_path).exists() {
-            kprintln!(
-                "-> [CANDLE] Local dictionary not found. Using Universal OS Dictionary for '{}'...",
-                arch_name
-            );
-            Tokenizer::from_file(&global_path).map_err(E::msg)?
         } else {
             // THE RAW GGUF EXTRACTOR
             kprintln!(
@@ -260,7 +223,7 @@ impl ActiveEngine {
                 models::llama::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
             "qwen2" => {
-                models::qwen2::load(model_name, model_content, &mut cursor, device, &tokenizer)?
+                models::qwen::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
             _ => {
                 return Err(E::msg(format!(

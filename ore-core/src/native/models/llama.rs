@@ -35,6 +35,12 @@ pub fn load<R: Read + Seek>(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> anyhow::Result<(OreEngine, ModelConfig)> {
+    
+    let arch_name = match model_content.metadata.get("general.architecture") {
+        Some(candle_core::quantized::gguf_file::Value::String(s)) => s.clone(),
+        _ => "llama".to_string(), // Fallback
+    };
+    
     let m = LlamaModel::from_gguf(model_content, reader, device)?;
 
     let mut stop_tokens = vec![128001, 128009];
@@ -48,20 +54,10 @@ pub fn load<R: Read + Seek>(
         stop_tokens.push(id);
     }
 
-    let name_lower = model_name.to_lowercase();
+    let name_lower: String = model_name.to_lowercase();
     let is_llama_2 = name_lower.contains("llama2") || name_lower.contains("llama-2");
 
-    let formatter: fn(&[ContextMessage], &str) -> String = if name_lower.contains("-base") {
-        // base model formatter (no special tokens, just pass through)
-        |history, prompt| {
-            let mut out = String::new();
-            for msg in history {
-                out.push_str(&format!("{}: {}\n", msg.role, msg.content));
-            }
-            out.push_str(&format!("user: {}\n", prompt));
-            out
-        }
-    } else if is_llama_2 {
+    let formatter: fn(&[ContextMessage], &str) -> String = if is_llama_2 {
         // llama 2 formatter
         |history, prompt| {
             let mut out = String::new();
@@ -121,7 +117,7 @@ pub fn load<R: Read + Seek>(
     };
 
     let cfg = ModelConfig {
-        architecture: "llama".to_string(),
+        architecture: arch_name,
         stop_tokens,
         formatter,
     };
