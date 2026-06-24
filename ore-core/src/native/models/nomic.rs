@@ -22,7 +22,7 @@
 //! - Added the `SystemEmbedder` OS wrapper for the Semantic Bus integration.
 //! -------------------------------------------------------------------------
 
-use crate::native::models::utils::with_tracing::{
+use super::utils::with_tracing::{
     LayerNorm, Linear, layer_norm, linear, linear_no_bias,
 };
 use candle_core::{D, DType, Device, Result, Tensor};

@@ -1,7 +1,9 @@
 use crate::native::gguf_tokenizer::TokenizerFromGguf;
 use crate::native::models;
 use crate::native::models::llama::ModelWeights as LlamaModel;
-use crate::native::models::qwen::ModelWeights as QwenModel;
+use crate::native::models::qwen2::ModelWeights as Qwen2Model;
+use crate::native::models::qwen3::ModelWeights as Qwen3Model;
+use crate::native::models::qwen3_moe::GGUFQWenMoE as Qwen3MoeModel;
 use crate::swap::ContextMessage;
 use anyhow::{Error as E, Result};
 use candle_core::quantized::gguf_file;
@@ -15,122 +17,75 @@ use tokenizers::Tokenizer;
 
 // Supports multiple architectures
 pub enum OreEngine {
-    Qwen(QwenModel),
+    Qwen2(Qwen2Model),
     Llama(LlamaModel),
+    Qwen3(Qwen3Model),
+    Qwen3Moe(Qwen3MoeModel),
 }
 
 impl OreEngine {
     pub fn forward(&mut self, input: &Tensor, start_pos: usize) -> Result<Tensor> {
         match self {
-            OreEngine::Qwen(m) => m.forward(input, start_pos).map_err(E::msg),
+            OreEngine::Qwen2(m) => m.forward(input, start_pos).map_err(E::msg),
             OreEngine::Llama(m) => m.forward(input, start_pos).map_err(E::msg),
+            OreEngine::Qwen3(m) => m.forward(input, start_pos).map_err(E::msg),
+            OreEngine::Qwen3Moe(m) => m.forward(input, start_pos).map_err(E::msg),
         }
-
-        // --- TO BE EVALUATED FOR NORMALIZATION ---
-        // let logits = match self {
-        //     OreEngine::Qwen2(m) => m.forward(input, start_pos).map_err(E::msg),
-        //     OreEngine::Llama(m) => m.forward(input, start_pos).map_err(E::msg),
-        // }
-        // let dims = logits.dims().len();
-        // let normalized_logits = if dims == 3 {
-        //     logits.squeeze(0)?.squeeze(0)? // If Qwen (3D), squeeze twice
-        // } else if dims == 2 {
-        //     logits.squeeze(0)?             // If Llama (2D), squeeze once
-        // } else {
-        //     logits
-        // };
-        // Ok(normalized_logits)
     }
 
     pub fn num_layers(&self) -> usize {
         match self {
             OreEngine::Llama(m) => m.layers.len(),
-            OreEngine::Qwen(m) => m.layers.len(),
+            OreEngine::Qwen2(m) => m.layers.len(),
+            OreEngine::Qwen3(m) => m.layers.len(),
+            OreEngine::Qwen3Moe(m) => m.layers.len(),
         }
     }
 
     pub fn clear_kv_cache(&mut self) {
         match self {
-            OreEngine::Llama(m) => {
-                for layer in m.layers.iter_mut() {
-                    layer.kv_cache = None;
-                }
-            }
-            OreEngine::Qwen(m) => {
-                for layer in m.layers.iter_mut() {
-                    layer.kv_cache = None;
-                }
-            }
+            OreEngine::Llama(m) => m.clear_kv_cache(),
+            OreEngine::Qwen2(m) => m.clear_kv_cache(),
+            OreEngine::Qwen3(m) => m.clear_kv_cache(),
+            OreEngine::Qwen3Moe(m) => m.clear_kv_cache(),
         }
     }
 
     pub fn truncate_kv_cache(&mut self, len: usize) {
         match self {
-            OreEngine::Llama(m) => {
-                for layer in m.layers.iter_mut() {
-                    if let Some((k, v)) = layer.kv_cache.as_ref() {
-                        // Dimension 2 is the sequence length. If it's larger than we want, slice it!
-                        if k.dim(2).unwrap_or(0) > len {
-                            layer.kv_cache = Some((
-                                // FIX: Make contiguous instantly after narrowing
-                                k.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                                v.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                            ));
-                        }
-                    }
-                }
-            }
-            OreEngine::Qwen(m) => {
-                for layer in m.layers.iter_mut() {
-                    if let Some((k, v)) = layer.kv_cache.as_ref() {
-                        if k.dim(2).unwrap_or(0) > len {
-                            layer.kv_cache = Some((
-                                // FIX: Make contiguous instantly after narrowing
-                                k.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                                v.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                            ));
-                        }
-                    }
-                }
-            }
+            OreEngine::Llama(m) => m.truncate_kv_cache(len),
+            OreEngine::Qwen2(m) => m.truncate_kv_cache(len),
+            OreEngine::Qwen3(m) => m.truncate_kv_cache(len),
+            OreEngine::Qwen3Moe(m) => m.truncate_kv_cache(len),
         }
     }
 
     pub fn get_kv_cache_len(&self) -> usize {
-        // Look at Layer 0's Key tensor. The 3rd dimension is usually the sequence length.
-        let first_layer_cache = match self {
-            OreEngine::Llama(m) => m.layers[0].kv_cache.as_ref(),
-            OreEngine::Qwen(m) => m.layers[0].kv_cache.as_ref(),
-        };
-
-        if let Some((k, _v)) = first_layer_cache {
-            k.dim(2).unwrap_or(0)
-        } else {
-            0
+        match self {
+            OreEngine::Llama(m) => m.get_kv_cache_len(),
+            OreEngine::Qwen2(m) => m.get_kv_cache_len(),
+            OreEngine::Qwen3(m) => m.get_kv_cache_len(),
+            OreEngine::Qwen3Moe(m) => m.get_kv_cache_len(),
         }
     }
 
     /// Rips the physical brain state out of the GPU
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
         match self {
-            OreEngine::Llama(m) => m.layers.iter().map(|l| l.kv_cache.clone()).collect(),
-            OreEngine::Qwen(m) => m.layers.iter().map(|l| l.kv_cache.clone()).collect(),
+            OreEngine::Llama(m) => m.get_kv_cache(),
+            OreEngine::Qwen2(m) => m.get_kv_cache(),
+            OreEngine::Qwen3(m) => m.get_kv_cache(),
+            OreEngine::Qwen3Moe(m) => m.get_kv_cache(),
         }
     }
 
     /// Injects a frozen brain state back into the AI
     pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
         match self {
-            OreEngine::Llama(m) => {
-                for (layer, saved_cache) in m.layers.iter_mut().zip(cache.into_iter()) {
-                    layer.kv_cache = saved_cache;
-                }
-            }
-            OreEngine::Qwen(m) => {
-                for (layer, saved_cache) in m.layers.iter_mut().zip(cache.into_iter()) {
-                    layer.kv_cache = saved_cache;
-                }
-            }
+            OreEngine::Llama(m) => m.set_kv_cache(cache),
+            OreEngine::Qwen2(m) => m.set_kv_cache(cache),
+            OreEngine::Qwen3(m) => m.set_kv_cache(cache),
+            OreEngine::Qwen3Moe(m) => m.set_kv_cache(cache),
         }
     }
 }
@@ -223,7 +178,13 @@ impl ActiveEngine {
                 models::llama::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
             "qwen2" => {
-                models::qwen::load(model_name, model_content, &mut cursor, device, &tokenizer)?
+                models::qwen2::load(model_name, model_content, &mut cursor, device, &tokenizer)?
+            }
+            "qwen3" => {
+                models::qwen3::load(model_name, model_content, &mut cursor, device, &tokenizer)?
+            }
+            "qwen3moe" => {
+                models::qwen3_moe::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
             _ => {
                 return Err(E::msg(format!(

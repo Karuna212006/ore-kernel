@@ -578,10 +578,169 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             base_repo: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
         }),
 
+        // ==================== LLAMA FAMILY MODELS ====================
+        // LLAMA 2 (The Classic)
+        "llama2:7b" => Some(ModelAsset::Gguf {
+            gguf_repo: "TheBloke/Llama-2-7B-GGUF",
+            gguf_file: "llama-2-7b.Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-2-7b-hf",
+        }),
+        "llama2:7b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "TheBloke/Llama-2-7B-GGUF",
+            gguf_file: "llama-2-7b.Q8_0.gguf",
+            base_repo: "meta-llama/Llama-2-7b-hf",
+        }),
+        "llama2:13b" => Some(ModelAsset::Gguf {
+            gguf_repo: "TheBloke/Llama-2-13B-GGUF",
+            gguf_file: "llama-2-13b.Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-2-13b-hf",
+        }),
+        "llama2:13b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "TheBloke/Llama-2-13B-GGUF",
+            gguf_file: "llama-2-13b.Q8_0.gguf",
+            base_repo: "meta-llama/Llama-2-13b-hf",
+        }),
+
+        // LLAMA 3 (Original - First Major Release)
+        // The Workhorses (8GB - 16GB VRAM)
+        "llama3:8b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3-8B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            base_repo: "meta-llama/Meta-Llama-3-8B-Instruct",
+        }),
+        "llama3:8b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3-8B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3-8B-Instruct-Q8_0.gguf",
+            base_repo: "meta-llama/Meta-Llama-3-8B-Instruct",
+        }),
+        "llama3:70b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3-70B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3-70B-Instruct-Q4_K_M.gguf",
+            base_repo: "meta-llama/Meta-Llama-3-70B-Instruct",
+        }),
+        // llama3:70b-q8 is not available in GGUF format. It is sharded. Will add support in future.
+
+        // LLAMA 3.1 (Next-Gen with 128K Context)
+        // The Workhorses (8GB - 16GB VRAM)
+        "llama3.1:8b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-3.1-8B-Instruct",
+        }),
+        "llama3.1:8b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf",
+            base_repo: "meta-llama/Llama-3.1-8B-Instruct",
+        }),
+        "llama3.1:70b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Meta-Llama-3.1-70B-Instruct-GGUF",
+            gguf_file: "Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-3.1-70B-Instruct",
+        }),
+        // "llama3.1:70b-q8" is sharded and not available in GGUF format. Will add support in future.
+
+        // LLAMA 3.2 (Mobile/Optimized + Multilingual)
+        // The Tiny Models (Ultra-fast, fits anywhere)
         "llama3.2:1b" => Some(ModelAsset::Gguf {
-            gguf_repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
+            gguf_repo: "unsloth/Llama-3.2-1B-Instruct-GGUF",
             gguf_file: "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
             base_repo: "unsloth/Llama-3.2-1B-Instruct",
+        }),
+        "llama3.2:1b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "unsloth/Llama-3.2-1B-Instruct-GGUF",
+            gguf_file: "Llama-3.2-1B-Instruct-Q8_0.gguf",
+            base_repo: "unsloth/Llama-3.2-1B-Instruct",
+        }),
+        "llama3.2:3b" => Some(ModelAsset::Gguf {
+            gguf_repo: "unsloth/Llama-3.2-3B-Instruct-GGUF",
+            gguf_file: "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            base_repo: "unsloth/Llama-3.2-3B-Instruct",
+        }),
+        "llama3.2:3b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "unsloth/Llama-3.2-3B-Instruct-GGUF",
+            gguf_file: "Llama-3.2-3B-Instruct-Q8_0.gguf",
+            base_repo: "unsloth/Llama-3.2-3B-Instruct",
+        }),
+
+        // 4. LLAMA 3.2 VISION — Multimodal cross-attention (image + text → text).
+        //
+        // ⚠️ TWO STRUCTURAL ISSUES — READ BEFORE USING ⚠️
+        //
+        // A) MMPROJ REQUIREMENT: like Qwen3-VL, every Llama 3.2 Vision GGUF repo
+        //    ships TWO required files:
+        //      1. The LLM weights  → gguf_file below
+        //      2. A vision encoder → "Llama-3.2-11B-Vision-Instruct-mmproj.f16.gguf"
+        //    Without the mmproj file the model cannot process images at all.
+        //    ModelAsset::Gguf only has a single gguf_file slot; the same
+        //    mmproj_file fix needed for Qwen3-VL applies here too.
+        //
+        // B) mllama ARCHITECTURE: Llama 3.2 Vision uses `mllama` (cross-attention
+        //    multimodal), which is NOT supported by mainline llama.cpp as of mid-2025.
+        //    It works in Ollama (Meta's private llama.cpp fork) but NOT in LM Studio
+        //    (confirmed broken as of LM Studio 3.6) and may fail in other backends.
+        //    Verify mllama support in your inference engine before loading.
+        //
+        // FILENAME QUIRK: the leafspark repo uses dot-separated quant extensions
+        // ("…-Instruct.Q4_K_M.gguf") unlike the hyphen style used by bartowski
+        // ("…-Instruct-Q4_K_M.gguf"). Do not conflate the two patterns.
+        "llama3.2:11b-vision" => Some(ModelAsset::Gguf {
+            // mmproj: Llama-3.2-11B-Vision-Instruct-mmproj.f16.gguf
+            gguf_repo: "leafspark/Llama-3.2-11B-Vision-Instruct-GGUF",
+            gguf_file: "Llama-3.2-11B-Vision-Instruct.Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-3.2-11B-Vision-Instruct",
+        }),
+        "llama3.2:11b-vision-q8" => Some(ModelAsset::Gguf {
+            // mmproj: Llama-3.2-11B-Vision-Instruct-mmproj.f16.gguf
+            gguf_repo: "leafspark/Llama-3.2-11B-Vision-Instruct-GGUF",
+            gguf_file: "Llama-3.2-11B-Vision-Instruct.Q8_0.gguf",
+            base_repo: "meta-llama/Llama-3.2-11B-Vision-Instruct",
+        }),
+        // "llama3.2-vl:90b" is sharded and requires a separate mmproj file. Will be supported in future.
+
+        // LLAMA 3.3 (Latest with improved reasoning)
+        // The Heavyweight (24GB+ VRAM) - Best 70B model overall
+        "llama3.3:70b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/Llama-3.3-70B-Instruct-GGUF",
+            gguf_file: "Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+            base_repo: "meta-llama/Llama-3.3-70B-Instruct",
+        }),
+        // "llama3.3:70b-q8" is sharded and not available in GGUF format. Will add support in future.
+
+        // LLAMA GUARD 2 (Safety/Fine-tuning models)
+        "llama-guard:8b" => Some(ModelAsset::Gguf {
+            gguf_repo: "QuantFactory/Meta-Llama-Guard-2-8B-GGUF",
+            gguf_file: "Meta-Llama-Guard-2-8B.Q4_K_M.gguf",
+            base_repo: "meta-llama/Meta-Llama-Guard-2-8B",
+        }),
+        "llama-guard:8b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "QuantFactory/Meta-Llama-Guard-2-8B-GGUF",
+            gguf_file: "Meta-Llama-Guard-2-8B.Q8_0.gguf",
+            base_repo: "meta-llama/Meta-Llama-Guard-2-8B",
+        }),
+
+        // -------------------------------------------------------------
+        // ⚠️ ORE V0.1 LIMITATION: SHARDED & MULTIMODAL MODELS
+        // -------------------------------------------------------------
+        // Models like Llama-4 (Scout/Maverick) and Qwen3-VL ship as 
+        // multi-part SHARDED GGUF files and require separate mmproj 
+        // vision encoders. 
+        // 
+        // The ORE NativeDriver currently expects a single contiguous 
+        // Memory Map (`mmap`). Sharded models are temporarily disabled 
+        // in `ore pull` until Phase 4 (The FUSE Virtual Filesystem) 
+        // is implemented. Use the Ollama Engine to run these models.
+        // -------------------------------------------------------------
+
+        // DEEPSEEK-R1 DISTILL LLAMA (Reasoning distilled into Llama architecture)
+        "deepseek-r1-llama:8b" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/DeepSeek-R1-Distill-Llama-8B-GGUF",
+            gguf_file: "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+            base_repo: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        }),
+        "deepseek-r1-llama:8b-q8" => Some(ModelAsset::Gguf {
+            gguf_repo: "bartowski/DeepSeek-R1-Distill-Llama-8B-GGUF",
+            gguf_file: "DeepSeek-R1-Distill-Llama-8B-Q8_0.gguf",
+            base_repo: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         }),
 
         // --- SYSTEM EMBEDDERS (SAFETENSORS) ---

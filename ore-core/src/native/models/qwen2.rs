@@ -1,6 +1,6 @@
-//! Qwen model implementation with quantization support.
+//! Qwen2 model implementation with quantization support.
 //!
-//! Qwen is a chat-optimized language model that supports 8-bit quantization
+//! Qwen2 is a chat-optimized language model that supports 8-bit quantization
 //! for reduced memory usage and faster inference.
 //!
 //! Key characteristics:
@@ -14,8 +14,8 @@
 //!
 
 use crate::native::engine::{ModelConfig, OreEngine};
-use crate::native::models::qwen::ModelWeights as QwenModel;
 use crate::swap::ContextMessage;
+use super::qwen2::ModelWeights as Qwen2Model;
 use candle_core::{
     DType, Device, IndexOp, Result, Tensor,
     quantized::{QMatMul, gguf_file},
@@ -33,13 +33,7 @@ pub fn load<R: Read + Seek>(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> anyhow::Result<(OreEngine, ModelConfig)> {
-
-    let arch_name = match model_content.metadata.get("general.architecture") {
-        Some(candle_core::quantized::gguf_file::Value::String(s)) => s.clone(),
-        _ => "qwen2".to_string(), // Fallback
-    };
-
-    let m = QwenModel::from_gguf(model_content, reader, device)?;
+    let m = Qwen2Model::from_gguf(model_content, reader, device)?;
 
     let mut stop_tokens = vec![151645, 151643];
     if let Some(id) = tokenizer.token_to_id("<|im_end|>") {
@@ -80,12 +74,12 @@ pub fn load<R: Read + Seek>(
     };
 
     let cfg = ModelConfig {
-        architecture: arch_name,
+        architecture: "qwen2".to_string(),
         stop_tokens,
         formatter,
     };
 
-    Ok((OreEngine::Qwen(m), cfg))
+    Ok((OreEngine::Qwen2(m), cfg))
 }
 
 #[derive(Debug, Clone)]
@@ -105,62 +99,6 @@ impl Module for Mlp {
 }
 
 #[derive(Debug, Clone)]
-pub enum MlpOrMoe {
-    Mlp(Mlp),
-    MoE {
-        n_expert_used: usize,
-        feed_forward_gate_inp: QMatMul,
-        experts: Vec<Mlp>,
-    },
-}
-
-impl Module for MlpOrMoe {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        match self {
-            Self::MoE { feed_forward_gate_inp, experts, n_expert_used } => {
-                let (b_size, seq_len, hidden_dim) = xs.dims3()?;
-                let xs_flat = xs.reshape(((), hidden_dim))?;
-                let router_logits = feed_forward_gate_inp.forward(&xs_flat)?;
-                let routing_weights = candle_nn::ops::softmax_last_dim(&router_logits)?;
-                let routing_weights = routing_weights.to_dtype(DType::F32)?.to_vec2::<f32>()?;
-
-                let mut top_x = vec![vec![]; experts.len()];
-                let mut selected_rws = vec![vec![]; experts.len()];
-                for (row_idx, rw) in routing_weights.iter().enumerate() {
-                    let mut dst = (0..rw.len() as u32).collect::<Vec<u32>>();
-                    dst.sort_by(|&i, &j| rw[j as usize].total_cmp(&rw[i as usize]));
-                    let mut sum_routing_weights = 0f32;
-                    for &expert_idx in dst.iter().take(*n_expert_used) {
-                        let expert_idx = expert_idx as usize;
-                        sum_routing_weights += rw[expert_idx];
-                        top_x[expert_idx].push(row_idx as u32);
-                    }
-                    for &expert_idx in dst.iter().take(*n_expert_used) {
-                        let expert_idx = expert_idx as usize;
-                        selected_rws[expert_idx].push(rw[expert_idx] / sum_routing_weights)
-                    }
-                }
-
-                let mut ys = xs_flat.zeros_like()?;
-                for (expert_idx, expert_layer) in experts.iter().enumerate() {
-                    let top_x_idx = &top_x[expert_idx];
-                    if top_x_idx.is_empty() { continue; }
-                    let top_x_t = Tensor::new(top_x_idx.as_slice(), xs_flat.device())?;
-                    let selected_rws_t = Tensor::new(selected_rws[expert_idx].as_slice(), xs_flat.device())?.reshape(((), 1))?;
-                    
-                    let current_state = xs_flat.index_select(&top_x_t, 0)?.reshape(((), hidden_dim))?;
-                    let current_hidden_states = expert_layer.forward(&current_state)?;
-                    let current_hidden_states = current_hidden_states.broadcast_mul(&selected_rws_t)?;
-                    ys = ys.index_add(&top_x_t, &current_hidden_states, 0)?;
-                }
-                ys.reshape((b_size, seq_len, hidden_dim))
-            }
-            Self::Mlp(mlp) => mlp.forward(xs),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct LayerWeights {
     pub attention_wq: QMatMul,
     pub attention_wk: QMatMul,
@@ -170,7 +108,7 @@ pub struct LayerWeights {
     pub attention_bv: Tensor,
     pub attention_wo: QMatMul,
     pub attention_norm: RmsNorm,
-    pub mlp_or_moe: MlpOrMoe,
+    pub mlp: Mlp,
     pub ffn_norm: RmsNorm,
     pub n_head: usize,
     pub n_kv_head: usize,
@@ -311,30 +249,13 @@ impl ModelWeights {
             Some(v) => Ok(v),
         };
 
-        let arch = match ct.metadata.get("general.architecture") {
-            Some(gguf_file::Value::String(s)) => s.clone(),
-            _ => "qwen2".to_string(), // Fallback
-        };
-        
-        println!("-> [CANDLE] Parsing metadata for architecture family: '{}'", arch);
-
-        let n_expert = md_get(&format!("{}.expert_count", arch))
-            .ok()
-            .and_then(|v| v.to_u32().ok())
-            .unwrap_or(0) as usize;
-            
-        let n_expert_used = md_get(&format!("{}.expert_used_count", arch))
-            .ok()
-            .and_then(|v| v.to_u32().ok())
-            .unwrap_or(0) as usize;
-
-        let head_count = md_get(&format!("{}.attention.head_count", arch))?.to_u32()? as usize;
-        let head_count_kv = md_get(&format!("{}.attention.head_count_kv", arch))?.to_u32()? as usize;
-        let embedding_length = md_get(&format!("{}.embedding_length", arch))?.to_u32()? as usize;
-        let context_length = md_get(&format!("{}.context_length", arch))?.to_u32()? as usize;
-        let block_count = md_get(&format!("{}.block_count", arch))?.to_u32()? as usize;
-        let rms_norm_eps = md_get(&format!("{}.attention.layer_norm_rms_epsilon", arch))?.to_f32()? as f64;
-        let rope_freq_base = md_get(&format!("{}.rope.freq_base", arch))
+        let head_count = md_get("qwen2.attention.head_count")?.to_u32()? as usize;
+        let head_count_kv = md_get("qwen2.attention.head_count_kv")?.to_u32()? as usize;
+        let embedding_length = md_get("qwen2.embedding_length")?.to_u32()? as usize;
+        let context_length = md_get("qwen2.context_length")?.to_u32()? as usize;
+        let block_count = md_get("qwen2.block_count")?.to_u32()? as usize;
+        let rms_norm_eps = md_get("qwen2.attention.layer_norm_rms_epsilon")?.to_f32()? as f64;
+        let rope_freq_base = md_get("qwen2.rope.freq_base")
             .and_then(|m| m.to_f32())
             .unwrap_or(10000f32);
 
@@ -373,35 +294,17 @@ impl ModelWeights {
             let attention_wo =
                 ct.tensor(reader, &format!("{prefix}.attn_output.weight"), device)?;
 
-            let mlp_or_moe = if n_expert <= 1 {
+            let mlp = {
                 let feed_forward_w1 =
                     ct.tensor(reader, &format!("{prefix}.ffn_gate.weight"), device)?;
                 let feed_forward_w2 =
                     ct.tensor(reader, &format!("{prefix}.ffn_down.weight"), device)?;
                 let feed_forward_w3 =
                     ct.tensor(reader, &format!("{prefix}.ffn_up.weight"), device)?;
-                MlpOrMoe::Mlp(Mlp {
+                Mlp {
                     feed_forward_w1: QMatMul::from_qtensor(feed_forward_w1)?,
                     feed_forward_w2: QMatMul::from_qtensor(feed_forward_w2)?,
                     feed_forward_w3: QMatMul::from_qtensor(feed_forward_w3)?,
-                })
-            } else {
-                let feed_forward_gate_inp = ct.tensor(reader, &format!("{prefix}.ffn_gate_inp.weight"), device)?;
-                let mut experts = Vec::with_capacity(n_expert);
-                for i in 0..n_expert {
-                    let feed_forward_w1 = ct.tensor(reader, &format!("{prefix}.ffn_gate.{i}.weight"), device)?;
-                    let feed_forward_w2 = ct.tensor(reader, &format!("{prefix}.ffn_down.{i}.weight"), device)?;
-                    let feed_forward_w3 = ct.tensor(reader, &format!("{prefix}.ffn_up.{i}.weight"), device)?;
-                    experts.push(Mlp {
-                        feed_forward_w1: QMatMul::from_qtensor(feed_forward_w1)?,
-                        feed_forward_w2: QMatMul::from_qtensor(feed_forward_w2)?,
-                        feed_forward_w3: QMatMul::from_qtensor(feed_forward_w3)?,
-                    })
-                }
-                MlpOrMoe::MoE {
-                    n_expert_used,
-                    feed_forward_gate_inp: QMatMul::from_qtensor(feed_forward_gate_inp)?,
-                    experts,
                 }
             };
 
@@ -424,7 +327,7 @@ impl ModelWeights {
                 attention_norm: RmsNorm::from_qtensor(attention_norm, rms_norm_eps)?,
                 cos: cos.clone(),
                 sin: sin.clone(),
-                mlp_or_moe,
+                mlp,
                 ffn_norm: RmsNorm::from_qtensor(ffn_norm, rms_norm_eps)?,
                 n_head: head_count,
                 n_kv_head: head_count_kv,
@@ -462,16 +365,6 @@ impl ModelWeights {
         }
     }
 
-    /// Clear the KV cache across all layers.
-    ///
-    /// Call this between independent conversations to free cached attention
-    /// state without recreating the model.
-    pub fn clear_kv_cache(&mut self) {
-        for layer in self.layers.iter_mut() {
-            layer.kv_cache = None;
-        }
-    }
-
     pub fn forward(&mut self, x: &Tensor, index_pos: usize) -> Result<Tensor> {
         let (_b_sz, seq_len) = x.dims2()?;
         let mask = if seq_len == 1 {
@@ -492,7 +385,7 @@ impl ModelWeights {
             let _enter = layer.span_mlp.enter();
             let residual = &x;
             let x = layer.ffn_norm.forward(&x)?;
-            let x = layer.mlp_or_moe.forward(&x)?;
+            let x = layer.mlp.forward(&x)?;
             let x = (x + residual)?;
             layer_in = x
         }
@@ -500,5 +393,52 @@ impl ModelWeights {
         let x = x.i((.., seq_len - 1, ..))?;
         let _enter = self.span_output.enter();
         self.output.forward(&x)
+    }
+
+    /// Clear the KV cache across all layers.
+    ///
+    /// Call this between independent conversations to free cached attention
+    /// state without recreating the model.
+    pub fn clear_kv_cache(&mut self) {
+        for layer in self.layers.iter_mut() {
+            layer.kv_cache = None;
+        }
+    }
+
+    // =====================================================================
+    // OS BRIDGE METHODS FOR PAGER
+    // =====================================================================
+    pub fn get_kv_cache_len(&self) -> usize {
+        // Look at Layer 0's Key tensor. The 3rd dimension is usually the sequence length.
+        if let Some((k, _v)) = self.layers[0].kv_cache.as_ref() {
+            k.dim(2).unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
+        self.layers.iter().map(|l| l.kv_cache.clone()).collect()
+    }
+
+    pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
+        for (layer, saved_cache) in self.layers.iter_mut().zip(cache.into_iter()) {
+            layer.kv_cache = saved_cache;
+        }
+    }
+
+    pub fn truncate_kv_cache(&mut self, len: usize) {
+        for layer in self.layers.iter_mut() {
+            if let Some((k, v)) = layer.kv_cache.as_ref() {
+                // Dimension 2 is the sequence length. If it's larger than we want, slice it!
+                if k.dim(2).unwrap_or(0) > len {
+                    layer.kv_cache = Some((
+                        // FIX: Make contiguous instantly after narrowing
+                        k.narrow(2, 0, len).unwrap().contiguous().unwrap(),
+                        v.narrow(2, 0, len).unwrap().contiguous().unwrap(),
+                    ));
+                }
+            }
+        }
     }
 }

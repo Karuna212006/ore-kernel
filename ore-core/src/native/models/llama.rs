@@ -17,8 +17,8 @@
 //!
 
 use crate::native::engine::{ModelConfig, OreEngine};
-use crate::native::models::llama::ModelWeights as LlamaModel;
 use crate::swap::ContextMessage;
+use super::llama::ModelWeights as LlamaModel;
 use candle_core::quantized::QTensor;
 use candle_core::quantized::{ggml_file, gguf_file};
 use candle_core::{DType, Device, IndexOp, Result, Tensor};
@@ -643,6 +643,49 @@ impl ModelWeights {
         let x = x.i((.., seq_len - 1, ..))?;
         let _enter = self.span_output.enter();
         self.output.forward(&x)
+    }
+
+    pub fn clear_kv_cache(&mut self) {
+        for layer in self.layers.iter_mut() {
+            layer.kv_cache = None;
+        }
+    }
+
+    // =====================================================================
+    // OS BRIDGE METHODS FOR PAGER
+    // =====================================================================
+    pub fn get_kv_cache_len(&self) -> usize {
+        // Look at Layer 0's Key tensor. The 3rd dimension is usually the sequence length.
+        if let Some((k, _v)) = self.layers[0].kv_cache.as_ref() {
+            k.dim(2).unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
+        self.layers.iter().map(|l| l.kv_cache.clone()).collect()
+    }
+
+    pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
+        for (layer, saved_cache) in self.layers.iter_mut().zip(cache.into_iter()) {
+            layer.kv_cache = saved_cache;
+        }
+    }
+
+    pub fn truncate_kv_cache(&mut self, len: usize) {
+        for layer in self.layers.iter_mut() {
+            if let Some((k, v)) = layer.kv_cache.as_ref() {
+                // Dimension 2 is the sequence length. If it's larger than we want, slice it!
+                if k.dim(2).unwrap_or(0) > len {
+                    layer.kv_cache = Some((
+                        // FIX: Make contiguous instantly after narrowing
+                        k.narrow(2, 0, len).unwrap().contiguous().unwrap(),
+                        v.narrow(2, 0, len).unwrap().contiguous().unwrap(),
+                    ));
+                }
+            }
+        }
     }
 }
 

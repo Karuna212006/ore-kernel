@@ -82,3 +82,42 @@ pub fn layer_norm<C: Into<candle_nn::LayerNormConfig>>(
     let span = tracing::span!(tracing::Level::TRACE, "layer-norm");
     Ok(LayerNorm { inner, span })
 }
+
+// QMatMul wrapper adding some tracing.
+#[derive(Clone)]
+pub struct QMatMul {
+    inner: candle_core::quantized::QMatMul,
+    span: tracing::Span,
+}
+
+impl QMatMul {
+    pub fn new(
+        out_dim: usize,
+        in_dim: usize,
+        vb: candle_transformers::quantized_var_builder::VarBuilder,
+    ) -> Result<Self> {
+        let ws = vb.get((in_dim, out_dim), "weight")?;
+        let inner = candle_core::quantized::QMatMul::from_arc(ws)?;
+        let span = tracing::span!(tracing::Level::TRACE, "qmatmul");
+        Ok(Self { inner, span })
+    }
+
+    pub fn from_weights(ws: std::sync::Arc<candle_core::quantized::QTensor>) -> Result<Self> {
+        let inner = candle_core::quantized::QMatMul::from_arc(ws)?;
+        let span = tracing::span!(tracing::Level::TRACE, "qmatmul");
+        Ok(Self { inner, span })
+    }
+}
+
+impl Module for QMatMul {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        let _enter = self.span.enter();
+        self.inner.forward(xs)
+    }
+}
+
+impl std::fmt::Debug for QMatMul {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "QMatMul")
+    }
+}

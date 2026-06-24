@@ -1,5 +1,9 @@
 pub mod bert;
 pub mod llama;
 pub mod nomic;
-pub mod qwen;
+pub mod qwen2;
+pub mod qwen3;
+pub mod qwen3_moe;
 pub mod utils;
+pub mod nn;
+pub mod transformers;
