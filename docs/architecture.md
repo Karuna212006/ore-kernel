@@ -170,11 +170,12 @@ ore-system/
 │   │   └── ollama.rs        OllamaDriver (HTTP proxy)
 │   └── native/              Native Candle Engine
 │       ├── mod.rs           NativeDriver (GGUF loading + hardware detection)
-│       ├── engine.rs        OreEngine enum (Llama/Qwen) + ActiveEngine
+│       ├── engine.rs        OreEngine enum (Llama/Qwen2/Qwen3) + ActiveEngine
 │       ├── gguf_tokenizer.rs GGUF metadata tokenizer extractor
 │       └── models/          Architecture-specific model loaders
 │           ├── llama.rs     Llama family loader
-│           ├── qwen.rs      Qwen2 family loader
+│           ├── qwen2.rs     Qwen2 family loader
+│           ├── qwen3.rs     Qwen3 MoE family loader
 │           └── bert.rs      BERT embedder (Safetensors)
 ├── ore-server/              HTTP daemon
 │   ├── main.rs              Boot sequence, router, GC scheduler
@@ -192,7 +193,6 @@ ore-system/
 │   └── utils.rs             HTTP helpers, token reader
 ├── manifests/               App permission manifests (.toml files)
 ├── models/                  Downloaded model weights
-├── tokenizers/              Global tokenizer JSONs
 ├── swap/                    SSD page files for agent context
 ├── ore.toml                 System configuration
 ├── Cargo.toml               Workspace config + release profile
@@ -205,7 +205,7 @@ ore-system/
 
 2. **Zero-Copy Architecture** - The Native Engine achieves sub-50ms instant boot times by utilizing `memmap2` to stream weights directly from the SSD to the GPU, bypassing system RAM bottlenecks. Additionally, the GPU scheduler detects when the requested model is already loaded (hot-swap) and shares the instance instead of reloading. RAII-based `GpuLease` ensures the semaphore is always released, even on panics.
 
-3. **OS-Style Memory Management & Resource Limits** - Idle agent context is paged to SSD (`swap/` directory) and restored on demand. The kernel strictly enforces `memory_limits` to prevent OOM crashes (setting explicit caps on KV-cache VRAM and JSON context tokens). The `SemanticBus` can transparently freeze vector pipelines to SSD (`.pipe` files) and runs hourly garbage collection to evict stale embeddings.
+3. **OS-Style Memory Management & Resource Limits** - Idle agent context is paged to SSD (`swap/` directory) and restored on demand. The kernel strictly enforces `memory_limits` to prevent OOM crashes (setting explicit caps on KV-cache VRAM and JSON context tokens) by triggering automatic background memory compaction. The `SemanticBus` can transparently freeze vector pipelines to SSD (`.pipe` files) and runs hourly garbage collection to evict stale embeddings.
 
 4. **Driver Abstraction** - The `InferenceDriver` trait decouples all kernel logic from the physical inference engine. Swap between Native Candle and Ollama with a single config change. Add new backends by implementing 9 trait methods.
 

@@ -168,6 +168,23 @@ SUCCESS: Memory for Agent 'my_agent' has been wiped clean.
 
 ---
 
+### `GET /compact/:app_id`
+
+Force a background memory compaction cycle for an agent, summarising chat history and evicting stale physical KV-Cache to save VRAM and SSD space.
+
+```bash
+curl -H "Authorization: Bearer $(cat ore-kernel.token)" \
+     http://127.0.0.1:3000/compact/my_agent
+```
+
+**Response:**
+```text
+SUCCESS: Memory for Agent 'my_agent' manually compacted.
+```
+
+---
+
+
 ## Inference Routes
 
 Source: [`ore-server/src/handlers/inference.rs`](../ore-server/src/handlers/inference.rs)

@@ -17,7 +17,10 @@ ore-core/src/native/
 ├── gguf_tokenizer.rs    GGUF metadata tokenizer extractor with JIT caching
 └── models/
     ├── llama.rs          Llama family model loader
-    ├── qwen.rs           Qwen2 family model loader
+    ├── qwen2.rs          Qwen2 family model loader
+    ├── qwen3.rs          Qwen3 MoE family model loader
+    ├── qwen3_moe.rs      Qwen3 MoE implementation
+    ├── transformers/     Specialized implementations (e.g. fused_moe)
     ├── bert.rs           BERT embedder (all-MiniLM)
     └── nomic.rs          Nomic v1.5 embedder (NomicBertModel with custom RoPE/SwiGLU)
 ```
@@ -45,7 +48,7 @@ When an inference request arrives and the model isn't loaded:
 1. **Locate the model** - Searches `models/<model_name>/` for `.gguf` files
 2. **Instant Boot (`memmap2`)** - Maps the file directly into virtual memory using the OS's `mmap` syscall, achieving sub-50ms boot times by letting the OS lazily stream required weight pages into the GPU instead of stalling system RAM.
 3. **Read GGUF metadata** - Extracts architecture type from `general.architecture` field via the memory-mapped cursor without reading the entire file.
-4. **Route to loader** - Dispatches to Llama or Qwen2 loader based on architecture.
+4. **Route to loader** - Dispatches to Llama, Qwen2, or Qwen3 MoE loader based on architecture.
 5. **Store in engine** - The loaded model and its memory-mapped file lock are held as an `ActiveEngine` until evicted.
 
 ### `OreEngine` Enum
@@ -53,7 +56,8 @@ When an inference request arrives and the model isn't loaded:
 ```rust
 pub enum OreEngine {
     Llama(/* architecture-specific model state */),
-    Qwen(/* architecture-specific model state */),
+    Qwen2(/* architecture-specific model state */),
+    Qwen3(/* architecture-specific model state */),
 }
 ```
 
@@ -157,7 +161,7 @@ No manual memory management. No garbage collector. The Rust type system enforces
 
 | Format | Type | Models | Pull Command |
 |---|---|---|---|
-| **GGUF** | Quantized weights | Llama 3.2, Qwen 2.5, etc. | `ore pull llama3.2:1b` |
+| **GGUF** | Quantized weights | Llama 3.2, Qwen 2.5, Qwen 3 MoE, etc. | `ore pull llama3.2:1b` |
 | **Safetensors** | Full-precision weights | BERT embedders | `ore pull system-embedder` |
 
 ### GGUF vs Safetensors

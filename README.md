@@ -44,7 +44,7 @@ It sits between your user-facing applications (OpenClaw, AutoGPT, custom termina
 | **Authentication** | Open API, anyone can call it | Token-based auth middleware on every request |
 | **Rate Limiting** | Agents can spam inference indefinitely | Per-agent token rate limiting enforced by manifest |
 | **Native Inference** | Requires external runtime (Ollama, etc.) | Built-in GGUF execution via Candle - zero dependencies |
-| **Context Persistence** | Agent memory lost on restart | SSD Pager freezes/restores chat history automatically |
+| **Context Persistence** | Agent memory lost on restart | SSD Pager freezes/restores chat history & true KV-Cache paging automatically |
 | **Native Embeddings** | Requires external embedding service | Built-in BERT & Nomic architectures (Safetensors) - zero external dependencies |
 | **Memory Management** | Stale agent data accumulates forever | TTL-based garbage collection with configurable sweep intervals |
 
@@ -111,21 +111,23 @@ A multi-layered security pipeline that processes every prompt before it reaches 
 A dedicated scheduling module built on `tokio::sync::Semaphore` with RAII-based `GpuLease` locks. The scheduler tracks VRAM state (`active_model`, `active_users`) and performs **hot-swap detection** - if the requested model is already loaded, it skips the reload and shares the existing instance. On a model mismatch, it performs a **context switch**, evicting the old model before loading the new one. When the `GpuLease` drops out of scope, the GPU lock is automatically released.
 
 **Native Candle Engine** (`ore-core/src/native/`)
-A bare-metal inference engine powered by Hugging Face's [Candle](https://github.com/huggingface/candle) framework:
+A modular bare-metal inference engine powered by Hugging Face's [Candle](https://github.com/huggingface/candle) framework:
 - **GGUF Model Loading** - Reads quantized `.gguf` weight files directly from disk with architecture auto-detection.
-- **Multi-Architecture Support** - Routes inference through architecture-specific model loaders (`Llama`, `Qwen2`) via the `OreEngine` enum.
+- **Multi-Architecture Support** - Routes inference through architecture-specific model loaders (`Llama`, `Qwen2`, and `Qwen3 MoE`) via the `OreEngine` enum.
+- **Fused MoE** - Specialized native Rust implementations for Mixture of Experts (MoE) architectures, maximizing CPU/GPU efficiency.
 - **2-Tier Tokenizer Resolution** - Searches for a local model-specific tokenizer (`tokenizer.json`) → extracts directly from GGUF metadata as a fallback (JIT-cached to disk for future loads).
 - **Hardware Auto-Detection** - Probes for CUDA, Metal, and CPU at boot and selects the optimal compute device.
 - **Streaming Token Generation** - Generates tokens one-at-a-time via `tokio::sync::mpsc`, enabling real-time streaming to the CLI.
 - **Native System Embedders** - A built-in `SystemEmbedder` (`ore-core/src/native/models/bert.rs` and `nomic.rs`) that loads architectures like BERT and Nomic v1.5 from Safetensors for embedding generation. Implements masked mean pooling and L2 normalization entirely in Rust. The embedder is serialized via a strict `embedder_lock` mutex to prevent multi-agent OOM crashes. When the embedding thread completes, Rust's ownership model automatically drops the model and frees all RAM to 0MB idle.
 
 **SSD Pager** (`ore-core/src/swap.rs`)
-An OS-style page file system for agent conversation context and AI memory state:
-- **Page Out** - Serializes an agent's full chat history (`Vec<ContextMessage>`) to JSON and freezes its Attention Key-Value (KV) Cache as `.safetensors` on the SSD (`swap/` directory).
-- **Page In** - Restores frozen chat context and physical KV-Cache back into RAM/VRAM on the next request, enabling multi-turn conversations across kernel restarts without re-processing prompts.
-- **Clear Page** - Wipes an agent's frozen memory on demand via `ore clear <app_id>`, including `.json` fallbacks, `.pipe` binary pipelines, and `.safetensors`.
+An OS-style page file system for true KV-Cache paging and agent conversation context:
+- **Page Out** - Serializes an agent's full chat history (`Vec<ContextMessage>`) to JSON and freezes its true physical Attention Key-Value (KV) Cache directly to the SSD (`swap/` directory).
+- **Page In** - Restores frozen chat context and true physical KV-Cache back into RAM/VRAM on the next request, enabling multi-turn conversations across kernel restarts without latency-heavy prompt re-processing.
+- **Background Memory Compaction** - The kernel monitors memory limits and automatically performs lazy eviction of stale KV-caches to prevent VRAM/SSD bloat, safely falling back to JSON summarization when caps are reached.
+- **Clear Page** - Wipes an agent's frozen memory on demand via `ore clear <app_id>`.
+- **Manual Compaction** - Force a memory compaction cycle via `ore compact <app_id>`.
 - Agents opt-in to stateful paging via the `stateful_paging = true` flag in their manifest's `[resources]` section.
-- **Background Memory Compaction** - The kernel automatically cleans up stale KV-caches to prevent SSD bloat, relying on JSON fallbacks when limits are reached.
 
 **Rate Limiter** (`ore-core/src/ipc.rs`)
 A `DashMap`-backed per-agent token counter that enforces the `max_tokens_per_minute` quota declared in each app's manifest. The counter auto-resets every 60 seconds. Agents that exceed their quota are blocked before reaching the GPU.
@@ -402,6 +404,7 @@ ore pull <model>         # Download and install a model (Ollama or HuggingFace)
 ore load <model>         # Pre-load a model into VRAM for zero-latency inference
 ore expel <model>        # Forcefully evict a model from GPU VRAM
 ore clear <app_id>       # Wipe an agent's frozen SSD memory (swap page)
+ore compact <app_id>     # Force background memory compaction for an agent
 ore kill <app_id>        # Emergency kill-switch for runaway agents
 ore manifest <app_id>    # Interactive wizard to generate a secure manifest
 ```

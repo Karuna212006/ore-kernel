@@ -207,6 +207,16 @@ ore clear my_agent
 
 ---
 
+### `ore compact <app_id>`
+
+Force a background memory compaction cycle for an agent. This parses the agent's chat history, mechanically summarizes it to fit within token limits, and evicts its stale KV-Cache to free up SSD space and GPU VRAM.
+
+```bash
+ore compact my_agent
+```
+
+---
+
 ### `ore kill <app_id>`
 
 Emergency kill-switch for runaway agents.
