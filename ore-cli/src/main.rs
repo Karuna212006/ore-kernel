@@ -69,14 +69,10 @@ async fn main() {
         }
         Commands::Top => {
             println!("{} Fetching Kernel Telemetry...", "[*]".bright_blue());
-            // this will hit a /metrics endpoint on the server
-            println!("\n{}", "=== ORE KERNEL TELEMETRY ===".bold());
-            println!("{:<20} | Status", "Subsystem");
-            println!("{:<20} | ------", "-------------------");
-            println!("{:<20} | {}", "Driver (Ollama)", "ACTIVE".green());
-            println!("{:<20} | {}", "Scheduler (VRAM)", "IDLE".yellow());
-            println!("{:<20} | {}", "Context Firewall", "ENFORCING".green());
-            println!("{:<20} | 0", "Connected Apps");
+            match client.unwrap().get(format!("{}/top", kernel_url)).send().await {
+                Ok(response) => println!("\n{}", response.text().await.unwrap_or_default()),
+                Err(_) => println!("{} ORE Kernel is offline.", "[-]".red()),
+            }
         }
         Commands::Ps => match client
             .unwrap()
@@ -491,7 +487,23 @@ async fn main() {
                 "[!]".red().bold(),
                 app_id.red()
             );
-            println!("{} App context wiped from GPU Memory.", "[+]".green());
+
+            match client
+                .unwrap()
+                .get(format!("{}/kill/{}", kernel_url, app_id))
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    let text = response.text().await.unwrap_or_default();
+                    if text.starts_with("SUCCESS") {
+                        println!("{} {}", "[+]".green(), text.bold());
+                    } else {
+                        println!("{} {}", "[-]".red(), text);
+                    }
+                }
+                Err(_) => println!("{} ORE Kernel is offline.", "[-]".red()),
+            }
         }
         Commands::Manifest { app_id } => {
             interactive::run_manifest_wizard(app_id, client.as_ref().unwrap()).await;

@@ -4,16 +4,6 @@ use reqwest::Client;
 use std::fs;
 use std::path::Path;
 
-#[derive(serde::Deserialize)]
-struct DriverTagsResponse {
-    models: Vec<DriverModel>,
-}
-
-#[derive(serde::Deserialize)]
-struct DriverModel {
-    name: String,
-}
-
 pub fn run_init_wizard() {
     println!("\n\n ORE KERNEL :: SYSTEM INITIALIZATION\n\n");
 
@@ -192,10 +182,17 @@ pub async fn run_manifest_wizard(app_id: &String, client: &Client) {
         println!("\n>>> CONFIGURING: Resources");
 
         let mut available_models = Vec::new();
-        if let Ok(res) = client.get("http://127.0.0.1:11434/api/tags").send().await
-            && let Ok(tags) = res.json::<DriverTagsResponse>().await
-        {
-            available_models = tags.models.into_iter().map(|m| m.name).collect();
+        if let Ok(res) = client.get("http://127.0.0.1:6767/ls").send().await {
+            if let Ok(text) = res.text().await {
+                for line in text.lines().skip(2) {
+                    if line.starts_with("No models") || line.is_empty() {
+                        continue;
+                    }
+                    if let Some(model_name) = line.split('|').next() {
+                        available_models.push(model_name.trim().to_string());
+                    }
+                }
+            }
         }
 
         let selected_models_formatted;

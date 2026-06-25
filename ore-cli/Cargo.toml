@@ -1,6 +1,6 @@
 [package]
-name = "ore-kernel"
-version = "0.0.1"
+name = "ore-cli"
+version = "0.1.0"
 edition = "2024"
 description = "The CLI tool for the ORE AI Kernel."
 license = "MIT OR Apache-2.0"

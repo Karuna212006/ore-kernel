@@ -71,6 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(handlers::system::health_check))
         .route("/ps", get(handlers::system::process_status))
         .route("/ls", get(handlers::system::list_models))
+        .route("/top", get(handlers::system::top_telemetry))
+        .route("/kill/:app_id", get(handlers::system::kill_app))
         .route("/agents", get(handlers::system::list_agents))
         .route("/manifests", get(handlers::system::list_manifests))
         .route("/expel/:model", get(handlers::system::expel_model))

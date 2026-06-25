@@ -2234,6 +2234,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "ore-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "dialoguer",
+ "futures-util",
+ "hf-hub",
+ "indicatif",
+ "inquire",
+ "reqwest 0.13.4",
+ "serde",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "ore-common"
 version = "0.1.0"
 dependencies = [
@@ -2267,23 +2284,6 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "ore-kernel"
-version = "0.0.1"
-dependencies = [
- "clap",
- "colored",
- "dialoguer",
- "futures-util",
- "hf-hub",
- "indicatif",
- "inquire",
- "reqwest 0.13.4",
- "serde",
- "tokio",
- "toml",
 ]
 
 [[package]]

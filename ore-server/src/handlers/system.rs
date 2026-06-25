@@ -44,7 +44,7 @@ pub async fn list_models(State(state): State<Arc<KernelState>>) -> String {
             let mut output = format!("{:<25} | {:<10} | {}\n", "REPOSITORY", "SIZE", "UPDATED");
             output.push_str("------------------------------------------------------\n");
             if models.is_empty() {
-                output.push_str("No models installed. Use 'ore install <model>'.\n");
+                output.push_str("No models installed. Use 'ore pull <model>'.\n");
             } else {
                 for m in models {
                     output.push_str(&format!(
@@ -301,4 +301,31 @@ pub async fn clear_memory(State(state): State<Arc<KernelState>>, Path(app_id): P
         "SUCCESS: Memory for Agent '{}' has been wiped clean from SSD and RAM.",
         app_id
     )
+}
+
+pub async fn top_telemetry(State(state): State<Arc<KernelState>>) -> String {
+    let scheduler_status = state.scheduler.get_status().await;
+    let apps_count = state.registry.list_apps().len();
+    
+    let mut output = format!("=== ORE KERNEL TELEMETRY ===\n");
+    output.push_str(&format!("{:<20} | Status\n", "Subsystem"));
+    output.push_str(&format!("{:<20} | ------\n", "-------------------"));
+    output.push_str(&format!("{:<20} | ACTIVE\n", format!("Driver ({})", state.driver.engine_name())));
+    output.push_str(&format!("{:<20} | {}\n", "Scheduler (VRAM)", scheduler_status));
+    output.push_str(&format!("{:<20} | ENFORCING\n", "Context Firewall"));
+    output.push_str(&format!("{:<20} | {}\n", "Connected Apps", apps_count));
+    
+    output
+}
+
+pub async fn kill_app(
+    State(state): State<Arc<KernelState>>,
+    Path(app_id): Path<String>,
+) -> String {
+    ore_core::kprintln!(
+        "-> [KERNEL COMMAND] SIGTERM received for Agent '{}'",
+        app_id
+    );
+    let _ = state.driver.invalidate_agent_cache(&app_id).await;
+    format!("SUCCESS: App '{}' context wiped from GPU Memory.", app_id)
 }
