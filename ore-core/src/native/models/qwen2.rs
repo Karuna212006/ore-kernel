@@ -16,6 +16,7 @@
 use crate::native::engine::{ModelConfig, OreEngine};
 use crate::swap::ContextMessage;
 use super::qwen2::ModelWeights as Qwen2Model;
+use super::nn::kv_cache::ConcatKvCache;
 use candle_core::{
     DType, Device, IndexOp, Result, Tensor,
     quantized::{QMatMul, gguf_file},
@@ -116,7 +117,7 @@ pub struct LayerWeights {
     pub cos: Tensor,
     pub sin: Tensor,
     pub neg_inf: Tensor,
-    pub kv_cache: Option<(Tensor, Tensor)>,
+    pub kv_cache: ConcatKvCache,
     pub span_attn: tracing::Span,
     pub span_rot: tracing::Span,
     pub span_mlp: tracing::Span,
@@ -173,19 +174,7 @@ impl LayerWeights {
         let q = self.apply_rotary_emb(&q, index_pos)?;
         let k = self.apply_rotary_emb(&k, index_pos)?;
 
-        let (k, v) = match &self.kv_cache {
-            None => (k, v),
-            Some((k_cache, v_cache)) => {
-                if index_pos == 0 {
-                    (k, v)
-                } else {
-                    let k = Tensor::cat(&[k_cache, &k], 2)?;
-                    let v = Tensor::cat(&[v_cache, &v], 2)?;
-                    (k, v)
-                }
-            }
-        };
-        self.kv_cache = Some((k.clone(), v.clone()));
+        let (k, v) = self.kv_cache.append(&k, &v)?;
 
         // Support for MQA, useful for 70B models and mistral.
         let k = repeat_kv(k, self.n_head / self.n_kv_head)?;
@@ -333,7 +322,7 @@ impl ModelWeights {
                 n_kv_head: head_count_kv,
                 head_dim,
                 neg_inf: neg_inf.clone(),
-                kv_cache: None,
+                kv_cache: ConcatKvCache::new(2),
                 span_attn,
                 span_rot,
                 span_mlp,
@@ -401,7 +390,7 @@ impl ModelWeights {
     /// state without recreating the model.
     pub fn clear_kv_cache(&mut self) {
         for layer in self.layers.iter_mut() {
-            layer.kv_cache = None;
+            layer.kv_cache.reset();
         }
     }
 
@@ -409,34 +398,33 @@ impl ModelWeights {
     // OS BRIDGE METHODS FOR PAGER
     // =====================================================================
     pub fn get_kv_cache_len(&self) -> usize {
-        // Look at Layer 0's Key tensor. The 3rd dimension is usually the sequence length.
-        if let Some((k, _v)) = self.layers[0].kv_cache.as_ref() {
-            k.dim(2).unwrap_or(0)
-        } else {
-            0
-        }
+        self.layers[0].kv_cache.current_seq_len()
     }
 
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
-        self.layers.iter().map(|l| l.kv_cache.clone()).collect()
+        self.layers.iter().map(|l| l.kv_cache.get_tensors()).collect()
     }
 
     pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
         for (layer, saved_cache) in self.layers.iter_mut().zip(cache.into_iter()) {
-            layer.kv_cache = saved_cache;
+            if let Some((k, v)) = saved_cache {
+                layer.kv_cache.set_tensors(k, v);
+            } else {
+                layer.kv_cache.reset();
+            }
         }
     }
 
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
-            if let Some((k, v)) = layer.kv_cache.as_ref() {
-                // Dimension 2 is the sequence length. If it's larger than we want, slice it!
-                if k.dim(2).unwrap_or(0) > len {
-                    layer.kv_cache = Some((
-                        // FIX: Make contiguous instantly after narrowing
-                        k.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(2, 0, len).unwrap().contiguous().unwrap(),
-                    ));
+            let c = &mut layer.kv_cache;
+            if c.current_seq_len() > len {
+                if let Some((k, v)) = c.get_tensors() {
+                    let dim = c.dim();
+                    c.set_tensors(
+                        k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap()
+                    );
                 }
             }
         }

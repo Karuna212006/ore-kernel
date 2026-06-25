@@ -55,6 +55,7 @@ pub trait InferenceDriver: Send + Sync {
         prompt: &str,
         history: Option<Vec<ContextMessage>>,
         tx: UnboundedSender<String>,
+        current_fingerprint: &str,
     ) -> Result<(), DriverError>;
 
     async fn generate_embeddings(

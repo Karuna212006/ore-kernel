@@ -121,6 +121,7 @@ impl InferenceDriver for OllamaDriver {
         prompt: &str,
         history: Option<Vec<ContextMessage>>,
         tx: UnboundedSender<String>,
+        _current_fingerprint: &str,
     ) -> Result<(), DriverError> {
         let url = format!("{}/api/chat", self.base_url);
 

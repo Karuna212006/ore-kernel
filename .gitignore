@@ -4,6 +4,6 @@
 *.safetensors
 *.xml
 *.json
+*.hash
 
 /models/
-/tokenizers/

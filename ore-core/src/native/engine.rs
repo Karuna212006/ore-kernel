@@ -183,7 +183,7 @@ impl ActiveEngine {
             "qwen3" => {
                 models::qwen3::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
-            "qwen3moe" => {
+            "qwen3moe" | "qwen2moe" => {
                 models::qwen3_moe::load(model_name, model_content, &mut cursor, device, &tokenizer)?
             }
             _ => {

@@ -57,6 +57,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
         lease.model
     );
 
+    let current_fingerprint = Pager::get_history_fingerprint(app_id);
     let mut current_context = None;
     if manifest.resources.json_history {
         current_context = Some(Pager::page_in_history(app_id));
@@ -79,14 +80,12 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                 &prompt_clone,
                 context_clone,
                 tx,
+                &current_fingerprint,
             )
             .await
         {
             kprintln!("-> [KERNEL ERROR] Inference execution failed: {}", e);
         }
-
-        kprintln!("-> Agent Execution complete. Releasing GPU Lock.");
-        drop(lease);
     });
 
     let mut full_response = String::new();
@@ -105,6 +104,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
             content: full_response.clone(),
         });
 
+        // CRITICAL: write the updated JSON to the SSD before you drop the GpuLease.
         Pager::page_out_history(app_id, &new_history);
 
         let total_chars: usize = new_history.iter().map(|m| m.content.len()).sum();
@@ -122,6 +122,9 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
 
         if token_cap_hit || kv_cap_hit {
             if manifest.memory_limits.auto_summarize_on_cap {
+                kprintln!("-> Agent Execution complete. Releasing GPU Lock for compaction.");
+                drop(lease);
+
                 if kv_cap_hit {
                     kprintln!("-> [KERNEL] Agent '{}' KV cache cap reached ({} > {} MB). Triggering Background Compaction...", app_id, current_kv_mb, manifest.memory_limits.max_kv_cache_mb);
                 } else {
@@ -148,7 +151,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     );
 
                     // Grab the GPU Lock to do the heavy compression
-                    let lease = scheduler_clone.request_gpu(&model_to_use, app_id).await;
+                    let comp_lease = scheduler_clone.request_gpu(&model_to_use, app_id).await;
                     kprintln!("-> [COMPACTION] GPU Lease acquired for background summarization.");
 
                     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -166,6 +169,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                                 &summary_prompt,
                                 None,
                                 tx,
+                                "",
                             )
                             .await;
                     });
@@ -175,7 +179,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                         summary.push_str(&word);
                     }
 
-                    drop(lease); // Release the GPU
+                    drop(comp_lease); // Release the GPU
 
                     // OS SAFETY HEURISTIC 1: TRUNCATE BLOATED SUMMARIES
                     let safe_target = (token_limit as f32 * 0.75) as usize;
@@ -239,7 +243,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     Pager::page_out_history(&m_id, &compacted_history);
 
                     // CRITICAL: We must delete the old .safetensors KV-cache because the sequence of tokens just fundamentally changed!
-                    if manifest.resources.stateful_paging {
+                    if manifest.resources.stateful_paging { 
                         Pager::delete_kv_cache(&m_id);
                         let _ = driver_clone.invalidate_agent_cache(&m_id).await;
                         kprintln!("-> [COMPACTION] KV-Cache invalidated and erased from disk.");
@@ -256,14 +260,23 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     > token_limit as usize
                     && new_history.len() > 2
                 {
-                    new_history.remove(0);
+                    new_history.remove(1);
                 }
                 Pager::page_out_history(app_id, &new_history);
                 if manifest.resources.stateful_paging {
                     Pager::delete_kv_cache(app_id);
+                    let _ = state.driver.invalidate_agent_cache(app_id).await;
                 }
+                kprintln!("-> Execution complete. Releasing GPU Lock.");
+                drop(lease);
             }
+        } else {
+            kprintln!("-> Execution complete. Releasing GPU Lock.");
+            drop(lease);
         }
+    } else {
+        kprintln!("-> Execution complete. Releasing GPU Lock.");
+        drop(lease);
     }
 
     full_response
@@ -323,6 +336,7 @@ pub async fn run_process(
         state.driver.engine_name()
     );
 
+    let current_fingerprint = Pager::get_history_fingerprint(app_id);
     let mut current_context = None;
     if manifest.resources.json_history {
         current_context = Some(Pager::page_in_history(app_id));
@@ -349,13 +363,11 @@ pub async fn run_process(
 
         let gen_task = tokio::spawn(async move {
             if let Err(e) = driver_inner
-                .generate_text(&m_name, &a_id, is_stateful, &p_text, ctx, tx_driver)
+                .generate_text(&m_name, &a_id, is_stateful, &p_text, ctx, tx_driver, &current_fingerprint)
                 .await
             {
                 kprintln!("-> [KERNEL ERROR] Inference execution failed: {}", e);
             }
-            kprintln!("-> Execution complete. Releasing GPU Lock.");
-            drop(lease); // Release the GPU instantly when generation ends!
         });
 
         let mut full_response = String::new();
@@ -394,6 +406,9 @@ pub async fn run_process(
             // The Compaction Engine
             if token_cap_hit || kv_cap_hit {
                 if manifest.memory_limits.auto_summarize_on_cap {
+                    kprintln!("-> Execution complete. Releasing GPU Lock for compaction.");
+                    drop(lease);
+
                     if kv_cap_hit {
                         kprintln!("-> [KERNEL] User '{}' VRAM/SSD cap reached ({}MB > {}MB). Triggering Compaction...", app_id_str, current_kv_mb, manifest.memory_limits.max_kv_cache_mb);
                     } else {
@@ -428,6 +443,7 @@ pub async fn run_process(
                                 &summary_prompt,
                                 None,
                                 tx_comp,
+                                "",
                             )
                             .await;
                     });
@@ -514,9 +530,18 @@ pub async fn run_process(
                     Pager::page_out_history(&app_id_str, &new_history);
                     if is_stateful {
                         Pager::delete_kv_cache(&app_id_str);
+                        let _ = state.driver.invalidate_agent_cache(&app_id_str).await;
                     }
+                    kprintln!("-> Execution complete. Releasing GPU Lock.");
+                    drop(lease);
                 }
+            } else {
+                kprintln!("-> Execution complete. Releasing GPU Lock.");
+                drop(lease);
             }
+        } else {
+            kprintln!("-> Execution complete. Releasing GPU Lock.");
+            drop(lease);
         }
     });
 

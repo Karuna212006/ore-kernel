@@ -2,6 +2,7 @@ use crate::ipc::MemoryChunk;
 use candle_core::{Device, Tensor};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use sha2::{Sha256, Digest};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -23,6 +24,20 @@ impl Pager {
         if !Path::new(Self::SWAP_DIR).exists() {
             fs::create_dir_all(Self::SWAP_DIR).expect("Failed to create SSD Swap directory");
         }
+    }
+
+    /// Generates a mathematically stable SHA-256 fingerprint of the JSON history
+    pub fn get_history_fingerprint(app_id: &str) -> String {
+        let history = Self::page_in_history(app_id);
+        let mut hasher = Sha256::new();
+        for msg in history {
+            hasher.update(msg.role.as_bytes());
+            hasher.update(msg.content.as_bytes());
+        }
+        let result = hasher.finalize();
+        
+        // Safely convert the 32 raw bytes into a 64-character hex string
+        result.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
     /// Tier 1 Paging, Freeze the Agent's Chat History to the SSD
@@ -87,15 +102,18 @@ impl Pager {
         None
     }
 
-    pub fn page_out_kv_cache(app_id: &str, model_name: &str, tensors: &HashMap<String, Tensor>) {
+    pub fn page_out_kv_cache(app_id: &str, model_name: &str, tensors: &HashMap<String, Tensor>, fingerprint: &str) {
         Self::ensure_swap_drive();
         let safe_model = model_name.replace(":", "-");
-        let path = format!("{}/{}_{}.safetensors", Self::SWAP_DIR, app_id, safe_model);
+        
+        let tensor_path  = format!("{}/{}_{}.safetensors", Self::SWAP_DIR, app_id, safe_model);
+        let hash_path = format!("{}/{}_{}.hash", Self::SWAP_DIR, app_id, safe_model);
 
         // Save the raw math matrices directly to the SSD
-        if let Err(e) = candle_core::safetensors::save(tensors, &path) {
+        if let Err(e) = candle_core::safetensors::save(tensors, &tensor_path) {
             kprintln!("-> [PAGER] [ERROR] Failed to save KV-Cache to SSD: {}", e);
         } else {
+            let _ = fs::write(&hash_path, fingerprint);
             kprintln!(
                 "-> [PAGER] Agent '{}' KV-Cache ({} Tensors) paged OUT to SSD.",
                 app_id,
@@ -108,21 +126,31 @@ impl Pager {
         app_id: &str,
         model_name: &str,
         device: &Device,
+        current_fingerprint: &str,
     ) -> Option<HashMap<String, Tensor>> {
         let safe_model = model_name.replace(":", "-");
-        let path = format!("{}/{}_{}.safetensors", Self::SWAP_DIR, app_id, safe_model);
+        let tensor_path = format!("{}/{}_{}.safetensors", Self::SWAP_DIR, app_id, safe_model);
+        let hash_path = format!("{}/{}_{}.hash", Self::SWAP_DIR, app_id, safe_model);
 
-        if Path::new(&path).exists() {
-            match candle_core::safetensors::load(&path, device) {
-                Ok(tensors) => {
-                    kprintln!("-> [PAGER] Agent '{}' KV-Cache paged IN from SSD.", app_id);
-                    return Some(tensors);
-                }
-                Err(e) => {
-                    kprintln!(
-                        "-> [PAGER] [WARN] Failed to load KV-Cache: {}. Falling back to JSON History.",
-                        e
-                    );
+        if Path::new(&hash_path).exists() {
+            if let Ok(saved_hash) = fs::read_to_string(&hash_path) {
+                if saved_hash == current_fingerprint {
+                    if Path::new(&tensor_path).exists() {
+                        match candle_core::safetensors::load(&tensor_path, device) {
+                            Ok(tensors) => {
+                                kprintln!("-> [PAGER] Agent '{}' KV-Cache paged IN from SSD.", app_id);
+                                return Some(tensors);
+                            }
+                            Err(e) => {
+                                kprintln!(
+                                    "-> [PAGER] [WARN] Failed to load KV-Cache: {}. Falling back to JSON History.",
+                                    e
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    println!("-> [PAGER] Context Fingerprint MISMATCH. History was altered. Forcing Cold Start.");
                 }
             }
         }
@@ -150,7 +178,7 @@ impl Pager {
             for entry in entries.flatten() {
                 let file_name = entry.file_name().to_string_lossy().to_string();
                 if file_name.starts_with(&format!("{}_", app_id))
-                    && file_name.ends_with(".safetensors")
+                    && (file_name.ends_with(".safetensors") || file_name.ends_with(".hash"))
                 {
                     let _ = fs::remove_file(entry.path());
                 }
@@ -168,7 +196,7 @@ impl Pager {
             for entry in entries.flatten() {
                 let file_name = entry.file_name().to_string_lossy().to_string();
                 if file_name.starts_with(&format!("{}_", app_id))
-                    && file_name.ends_with(".safetensors")
+                    && (file_name.ends_with(".safetensors") || file_name.ends_with(".hash"))
                 {
                     let _ = fs::remove_file(entry.path());
                     kprintln!(

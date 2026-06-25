@@ -110,6 +110,7 @@ impl InferenceDriver for NativeDriver {
         prompt: &str,
         history: Option<Vec<ContextMessage>>,
         tx: UnboundedSender<String>,
+        current_fingerprint: &str,
     ) -> Result<(), DriverError> {
         let model = model.trim().replace(':', "-");
 
@@ -138,12 +139,14 @@ impl InferenceDriver for NativeDriver {
                             crate::native::kv_manager::KvManager::flatten_cache(&raw_cache);
                         let out_id = active.current_app_id.clone();
                         let out_model = active.model_name.clone();
+                        let out_fingerprint = crate::swap::Pager::get_history_fingerprint(&out_id);
 
                         eviction_task = Some(tokio::spawn(async move {
                             crate::swap::Pager::page_out_kv_cache(
                                 &out_id,
                                 &out_model,
                                 &flat_tensors,
+                                &out_fingerprint,
                             );
                         }));
                     }
@@ -188,6 +191,8 @@ impl InferenceDriver for NativeDriver {
 
         let a_id = app_id.to_string();
 
+        let curr_fingerprint = current_fingerprint.to_string();
+
         let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
             let mut state_guard = engine_arc.lock().unwrap();
             let active = state_guard.as_mut().unwrap();
@@ -198,7 +203,7 @@ impl InferenceDriver for NativeDriver {
                 if is_hot_hit {
                     current_cache_len = active.model.get_kv_cache_len();
                     kprintln!("-> [NATIVE DRIVER] RAM Cache Hit ({} tokens). Bypassing SSD.", current_cache_len);
-                } else if let Some(frozen_tensors) = crate::swap::Pager::page_in_kv_cache(&a_id, &model, &device_clone) {
+                } else if let Some(frozen_tensors) = crate::swap::Pager::page_in_kv_cache(&a_id, &model, &device_clone, &curr_fingerprint) {
                     // Unflatten the SSD file back into 3D Neural Tensors
                     let cache = crate::native::kv_manager::KvManager::unflatten_cache(&frozen_tensors, active.model.num_layers());
                     // Inject directly into the Engine's brain!
@@ -454,12 +459,14 @@ impl InferenceDriver for NativeDriver {
                             crate::native::kv_manager::KvManager::flatten_cache(&raw_cache);
                         let out_id = active.current_app_id.clone();
                         let out_model = active.model_name.clone();
+                        let out_fingerprint = crate::swap::Pager::get_history_fingerprint(&out_id);
 
                         eviction_task = Some(tokio::spawn(async move {
                             crate::swap::Pager::page_out_kv_cache(
                                 &out_id,
                                 &out_model,
                                 &flat_tensors,
+                                &out_fingerprint,
                             );
                         }));
                     }

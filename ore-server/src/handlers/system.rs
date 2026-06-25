@@ -256,7 +256,7 @@ pub async fn compact_memory(
     // Spawn the generation task
     tokio::spawn(async move {
         let _ = driver_clone
-            .generate_text(&m_clone, &a_clone, false, &summary_prompt, None, tx)
+            .generate_text(&m_clone, &a_clone, false, &summary_prompt, None, tx, "")
             .await;
     });
 
@@ -290,14 +290,15 @@ pub async fn compact_memory(
     format!("SUCCESS: Memory for Agent '{}' manually compacted.", app_id)
 }
 
-pub async fn clear_memory(Path(app_id): Path<String>) -> String {
+pub async fn clear_memory(State(state): State<Arc<KernelState>>, Path(app_id): Path<String>) -> String {
     kprintln!(
         "-> [KERNEL COMMAND] Wiping SSD Memory for Agent '{}'",
         app_id
     );
     Pager::clear_page(&app_id);
+    let _ = state.driver.invalidate_agent_cache(&app_id).await;
     format!(
-        "SUCCESS: Memory for Agent '{}' has been wiped clean.",
+        "SUCCESS: Memory for Agent '{}' has been wiped clean from SSD and RAM.",
         app_id
     )
 }
