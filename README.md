@@ -71,7 +71,7 @@ Because ORE solves the VRAM "Out of Memory" problem via SSD Paging, the bottlene
 
 | Metric | Result |
 |---|---|
-| **Max Dormant Agents** | **1,000+** <br> *(They just sleep on the SSD using 0 RAM).* |
+| **Max Dormant Agents** | **1,000+** *(They just sleep on the SSD using 0 RAM).* |
 | **Max "Active" Swarm** | **~40 to 50 Agents.** |
 | **Why?** | If you have 50 agents in a Swarm actively chatting, scraping, and coding, ORE cycles through them in a priority-based queue. This is completely acceptable for background autonomous workflows (like QA testing a codebase or researching a topic). |
 | **Without ORE** | **This laptop crashes at 2 Agents.** |
@@ -90,7 +90,7 @@ Because ORE solves the VRAM "Out of Memory" problem via SSD Paging, the bottlene
 
 | Metric | Result |
 |---|---|
-| **Max Dormant Agents** | **Infinite** <br> *(Limited only by SSD Terabytes).* |
+| **Max Dormant Agents** | **Infinite** *(Limited only by SSD Terabytes).* |
 | **Max "Active" Swarm** | **~150 to 200 Agents.** |
 | **Why?** | Because the silicon is 3x faster, the ORE GPU Semaphore can process 150 agents in a one-minute window. You could simulate an entire corporate software department (10 Managers, 40 Coders, 50 QA Testers, 50 Researchers) all passing data through the ORE Semantic Bus continuously in real-time. |
 | **Without ORE** | **This laptop crashes at ~8 Agents.** |
