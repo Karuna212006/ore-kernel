@@ -27,13 +27,13 @@ impl KvManager {
     ) -> Vec<Option<(Tensor, Tensor)>> {
         let mut cache = vec![None; num_layers];
 
-        for layer_idx in 0..num_layers {
+        for (layer_idx, layer_cache) in cache.iter_mut().enumerate().take(num_layers) {
             let k_key = format!("layer_{}_k", layer_idx);
             let v_key = format!("layer_{}_v", layer_idx);
 
             // If both Key and Value exist for this layer, reconstruct it
             if let (Some(k), Some(v)) = (map.get(&k_key), map.get(&v_key)) {
-                cache[layer_idx] = Some((k.clone(), v.clone()));
+                *layer_cache = Some((k.clone(), v.clone()));
             }
         }
         cache

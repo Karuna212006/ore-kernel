@@ -47,6 +47,7 @@ pub trait InferenceDriver: Send + Sync {
 
     async fn list_local_models(&self) -> Result<Vec<LocalModel>, DriverError>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn generate_text(
         &self,
         model: &str,

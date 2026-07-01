@@ -6,19 +6,19 @@
 //! References:
 //! - [Qwen3 Models](https://huggingface.co/Qwen/Qwen3-0.6B) (architecture based on official implementations)
 //!
-use candle_core::quantized::{gguf_file, QTensor};
+use candle_core::quantized::{QTensor, gguf_file};
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{Activation, Embedding, Module};
 use std::io::{Read, Seek};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
 
-use crate::native::engine::{ModelConfig, OreEngine};
-use crate::swap::ContextMessage;
 use super::nn::kv_cache::ConcatKvCache;
-use super::utils::with_tracing::QMatMul;
 use super::transformers::quantized_nn::RmsNorm;
 use super::utils::repeat_kv;
+use super::utils::with_tracing::QMatMul;
+use crate::native::engine::{ModelConfig, OreEngine};
+use crate::swap::ContextMessage;
 
 pub fn load<R: Read + Seek>(
     _model_name: &str,
@@ -252,9 +252,9 @@ impl AttentionWeights {
         let k_norm = gg.rms_norm(&format!("{prefix}.attn_k_norm.weight"), rms_norm_eps)?;
 
         // ORE KERNEL OVERRIDE: FORCE UNIVERSAL MEMORY LAYOUT
-        // We override device.is_cpu() to false. This forces Qwen3 to use 
-        // the standard ConcatKvCache, guaranteeing SSD Paging works 
-        // flawlessly across all hardware architectures. 
+        // We override device.is_cpu() to false. This forces Qwen3 to use
+        // the standard ConcatKvCache, guaranteeing SSD Paging works
+        // flawlessly across all hardware architectures.
         // So we don't use Candle's InterleavedKvCache and RawInterleavedKvCache structs for KV cache in Qwen3.
         let kv_cache = ConcatKvCache::new(2);
 
@@ -497,11 +497,7 @@ impl ModelWeights {
                         Some(w) => (i + offset) as i64 - j as i64 <= w as i64,
                         None => true,
                     };
-                    if past_ok && sw_ok {
-                        0.
-                    } else {
-                        minf
-                    }
+                    if past_ok && sw_ok { 0. } else { minf }
                 })
             })
             .collect();
@@ -535,10 +531,13 @@ impl ModelWeights {
 
     /// Bridge for OS Pager: Extract
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
-        self.layers.iter().map(|l| {
-            // No .as_ref() needed! Just ask the cache directly.
-            l.self_attn.kv_cache.get_tensors()
-        }).collect()
+        self.layers
+            .iter()
+            .map(|l| {
+                // No .as_ref() needed! Just ask the cache directly.
+                l.self_attn.kv_cache.get_tensors()
+            })
+            .collect()
     }
 
     /// Bridge for OS Pager: Inject
@@ -551,28 +550,27 @@ impl ModelWeights {
             }
         }
     }
-    
+
     /// Bridge for OS Pager: Length Check
     pub fn get_kv_cache_len(&self) -> usize {
         // Just call the method directly on Layer 0
         self.layers[0].self_attn.kv_cache.current_seq_len()
     }
-    
+
     /// Bridge for OS Pager: Truncation
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
             let c = &mut layer.self_attn.kv_cache;
-            
-            if c.current_seq_len() > len {
-                if let Some((k, v)) = c.get_tensors() {
-                    let dim = c.dim(); 
+
+            if c.current_seq_len() > len
+                && let Some((k, v)) = c.get_tensors() {
+                    let dim = c.dim();
                     c.set_tensors(
                         // CRITICAL: .contiguous() prevents SSD Safetensor corruption!
                         k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap()
+                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
                     );
                 }
-            }
         }
     }
 }

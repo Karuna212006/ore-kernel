@@ -1,17 +1,17 @@
+use super::nn::kv_cache::ConcatKvCache;
 use super::qwen3::{Gguf, RotaryEmbedding};
-use super::utils::with_tracing::QMatMul;
 use super::transformers::fused_moe::{FusedMoeGGUF, MoeCfg};
 use super::transformers::quantized_nn::RmsNorm;
 use super::utils::repeat_kv;
-use super::nn::kv_cache::ConcatKvCache;
+use super::utils::with_tracing::QMatMul;
 use crate::native::engine::{ModelConfig, OreEngine};
 use crate::swap::ContextMessage;
 use candle_core::quantized::gguf_file;
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::Linear;
 use candle_nn::{Embedding, Module};
-use std::sync::Arc;
 use std::io::{Read, Seek};
+use std::sync::Arc;
 use tokenizers::Tokenizer;
 
 pub fn load<R: Read + Seek>(
@@ -21,7 +21,6 @@ pub fn load<R: Read + Seek>(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> anyhow::Result<(OreEngine, ModelConfig)> {
-    
     // The MoE loader needs to know the DType upfront
     let dtype = match model_content.metadata.get("general.dtype") {
         Some(gguf_file::Value::U32(0)) => DType::F32,
@@ -476,11 +475,7 @@ impl GGUFQWenMoE {
                         Some(w) => (i + offset) as i64 - j as i64 <= w as i64,
                         None => true,
                     };
-                    if past_ok && sw_ok {
-                        0.
-                    } else {
-                        minf
-                    }
+                    if past_ok && sw_ok { 0. } else { minf }
                 })
             })
             .collect();
@@ -525,7 +520,10 @@ impl GGUFQWenMoE {
     }
 
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
-        self.layers.iter().map(|l| l.self_attn.kv_cache.get_tensors()).collect()
+        self.layers
+            .iter()
+            .map(|l| l.self_attn.kv_cache.get_tensors())
+            .collect()
     }
 
     pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
@@ -544,15 +542,14 @@ impl GGUFQWenMoE {
 
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
-            if layer.self_attn.kv_cache.current_seq_len() > len {
-                if let Some((k, v)) = layer.self_attn.kv_cache.get_tensors() {
+            if layer.self_attn.kv_cache.current_seq_len() > len
+                && let Some((k, v)) = layer.self_attn.kv_cache.get_tensors() {
                     let dim = layer.self_attn.kv_cache.dim();
                     layer.self_attn.kv_cache.set_tensors(
                         k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
                         v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
                     );
                 }
-            }
         }
     }
 }

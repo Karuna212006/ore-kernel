@@ -1,13 +1,13 @@
 use colored::*;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
+use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
 use reqwest::{
     Client,
     header::{AUTHORIZATION, HeaderMap, HeaderValue},
 };
 use serde::Deserialize;
 use std::{cmp::min, fs, io::Write, path::Path, process::exit};
-use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
 
 #[derive(Deserialize)]
 pub struct OreConfig {
@@ -43,68 +43,59 @@ fn visible_len(text: &str) -> usize {
 
 /// Generates the premium Hermes/Claude-style TUI theme
 pub fn get_ore_theme() -> RenderConfig<'static> {
-    let mut render_config = RenderConfig::default();
-    
-    // Prompts: ? (Yellow) and ✔ (Green)
-    render_config.prompt_prefix = Styled::new("?").with_fg(Color::LightYellow);
-    render_config.answered_prompt_prefix = Styled::new("✔").with_fg(Color::LightGreen);
-    
-    // Dim help text
-    render_config.help_message = StyleSheet::new().with_fg(Color::DarkGrey);
-    
-    // User answers in Cyan
-    render_config.answer = StyleSheet::new().with_fg(Color::LightCyan);
-    
-    // Multi-select checkboxes
-    render_config.selected_checkbox = Styled::new("[x]").with_fg(Color::LightGreen);
-    render_config.unselected_checkbox = Styled::new("[ ]").with_fg(Color::DarkGrey);
-    
-    // The "❯" pointer for lists (Fix for the compiler error)
-    render_config.highlighted_option_prefix = Styled::new(">").with_fg(Color::LightCyan);
-    
-    // (Optional) Style the text of the selected option itself
-    render_config.selected_option = Some(StyleSheet::new().with_fg(Color::LightCyan));
-    
-    render_config
+    RenderConfig {
+        prompt_prefix: Styled::new("?").with_fg(Color::LightYellow),
+        answered_prompt_prefix: Styled::new("✔").with_fg(Color::LightGreen),
+        help_message: StyleSheet::new().with_fg(Color::DarkGrey),
+        answer: StyleSheet::new().with_fg(Color::LightCyan),
+        selected_checkbox: Styled::new("[x]").with_fg(Color::LightGreen),
+        unselected_checkbox: Styled::new("[ ]").with_fg(Color::DarkGrey),
+        highlighted_option_prefix: Styled::new(">").with_fg(Color::LightCyan),
+        selected_option: Some(StyleSheet::new().with_fg(Color::LightCyan)),
+        ..RenderConfig::default()
+    }
 }
 
 /// Prints a sleek unicode border box
 pub fn print_panel(title: &str, subtitle: &str) {
     println!();
     let width: usize = 65; // Fixed terminal width for the boxes
-    
+
     // Top border
     let top_filler = "─".repeat(width.saturating_sub(title.len() + 5));
-    println!("{} {} {}{}", 
-        "╭─".bright_black(), 
-        title.bold(), 
-        top_filler.bright_black(), 
+    println!(
+        "{} {} {}{}",
+        "╭─".bright_black(),
+        title.bold(),
+        top_filler.bright_black(),
         "╮".bright_black()
     );
-    
+
     // Middle section (centered subtitle)
     if !subtitle.is_empty() {
         let sub_len = visible_len(subtitle);
         let available_space = width.saturating_sub(2); // Space inside the borders
-        
+
         let total_padding = available_space.saturating_sub(sub_len);
         let left_pad = " ".repeat(total_padding / 2);
         let right_pad = " ".repeat(total_padding - (total_padding / 2)); // Catches odd numbers
-        
-        println!("{}{}{}{}{}", 
-            "│".bright_black(), 
+
+        println!(
+            "{}{}{}{}{}",
+            "│".bright_black(),
             left_pad,
-            subtitle.bright_black(), 
-            right_pad, 
+            subtitle.bright_black(),
+            right_pad,
             "│".bright_black()
         );
     }
-    
+
     // Bottom border
     let bottom_filler = "─".repeat(width - 2);
-    println!("{}{}{}", 
-        "╰".bright_black(), 
-        bottom_filler.bright_black(), 
+    println!(
+        "{}{}{}",
+        "╰".bright_black(),
+        bottom_filler.bright_black(),
         "╯".bright_black()
     );
     println!();
@@ -115,7 +106,10 @@ pub fn print_section_divider(num: &str, title: &str) {
     let width: usize = 65;
     let filler_len = width.saturating_sub(title.len() + num.len() + 7);
     let filler = "─".repeat(filler_len);
-    println!("\n{}", format!("─── {}. {} {}", num, title, filler).bright_black());
+    println!(
+        "\n{}",
+        format!("─── {}. {} {}", num, title, filler).bright_black()
+    );
 }
 
 pub fn get_system_engine() -> String {
@@ -154,7 +148,7 @@ pub enum ModelAsset {
 /// Maps a simple user alias to Hugging Face repositories
 pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
     match alias {
-        // QWEN 2.5 INSTRUCT (For General Chat & Agent Swarms)        
+        // QWEN 2.5 INSTRUCT (For General Chat & Agent Swarms)
         // The Tiny Models (Ultra-fast, fits anywhere)
         "qwen2.5:0.5b" => Some(ModelAsset::Gguf {
             gguf_repo: "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
@@ -296,7 +290,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3-4B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-4B",
         }),
-        
+
         // The Workhorses (8GB - 16GB VRAM)
         "qwen3:8b" => Some(ModelAsset::Gguf {
             gguf_repo: "Qwen/Qwen3-8B-GGUF",
@@ -318,7 +312,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3-14B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-14B",
         }),
-        
+
         // The Heavyweights (24GB+ VRAM / Mac Studios)
         "qwen3:32b" => Some(ModelAsset::Gguf {
             gguf_repo: "Qwen/Qwen3-32B-GGUF",
@@ -341,7 +335,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3-235B-A22B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-235B-A22B",
         }),
-        
+
         // 2. QWEN 3 CODER (The Bleeding-Edge Software Agents)
         "qwen3-coder:30b-a3b" => Some(ModelAsset::Gguf {
             gguf_repo: "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
@@ -365,7 +359,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             base_repo: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
         }),
 
-        // QWEN 3.5 FAMILY (Instruct & Coder)        
+        // QWEN 3.5 FAMILY (Instruct & Coder)
         "qwen3.5:0.8b" => Some(ModelAsset::Gguf {
             gguf_repo: "unsloth/Qwen3.5-0.8B-GGUF",
             gguf_file: "Qwen3.5-0.8B-Q4_K_M.gguf",
@@ -406,7 +400,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3.5-9B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3.5-9B",
         }),
-        
+
         // --- Medium (dense) ---
         "qwen3.5:27b" => Some(ModelAsset::Gguf {
             gguf_repo: "unsloth/Qwen3.5-27B-GGUF",
@@ -418,7 +412,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3.5-27B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3.5-27B",
         }),
-        
+
         // --- Medium (MoE) ---
         "qwen3.5:35b-a3b" => Some(ModelAsset::Gguf {
             gguf_repo: "unsloth/Qwen3.5-35B-A3B-GGUF",
@@ -452,7 +446,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3.6-27B-Q8_0.gguf",
             base_repo: "Qwen/Qwen3.6-27B",
         }),
-        
+
         // "Qwen3.6-35B-A3B: Agentic Coding Power, Now Open to All"
         "qwen3.6:35b-a3b" => Some(ModelAsset::Gguf {
             gguf_repo: "unsloth/Qwen3.6-35B-A3B-GGUF",
@@ -512,7 +506,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
         // official repo's own usage example. The Q4_K_M filename used below for
         // 235B-A22B may need verifying as single-file-vs-sharded before wiring into
         // an auto-downloader — same caveat as flagged for Qwen3-Coder-Next earlier.
-        
+
         // --- 2B ---
         "qwen3-vl:2b-instruct" => Some(ModelAsset::Gguf {
             // mmproj: mmproj-Qwen3VL-2B-Instruct-F16.gguf
@@ -538,7 +532,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3VL-2B-Thinking-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-VL-2B-Thinking",
         }),
-        
+
         // --- 4B ---
         "qwen3-vl:4b-instruct" => Some(ModelAsset::Gguf {
             // mmproj: mmproj-Qwen3VL-4B-Instruct-F16.gguf
@@ -564,7 +558,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3VL-4B-Thinking-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-VL-4B-Thinking",
         }),
-        
+
         // --- 8B ---
         // (filenames here directly confirmed against the live HF file tree)
         "qwen3-vl:8b-instruct" => Some(ModelAsset::Gguf {
@@ -591,7 +585,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3VL-8B-Thinking-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-VL-8B-Thinking",
         }),
-        
+
         // --- 32B ---
         "qwen3-vl:32b-instruct" => Some(ModelAsset::Gguf {
             // mmproj: mmproj-Qwen3VL-32B-Instruct-F16.gguf
@@ -617,7 +611,7 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             gguf_file: "Qwen3VL-32B-Thinking-Q8_0.gguf",
             base_repo: "Qwen/Qwen3-VL-32B-Thinking",
         }),
-        
+
         // --- 30B-A3B (MoE) ---
         "qwen3-vl:30b-a3b-instruct" => Some(ModelAsset::Gguf {
             // mmproj: mmproj-Qwen3VL-30B-A3B-Instruct-F16.gguf
@@ -658,9 +652,8 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
             base_repo: "Qwen/Qwen3-VL-235B-A22B-Thinking",
         }),
 
-
         // DEEPSEEK-R1
-        // 3. REASONING & THINKING MODELS (The <think> tag generators)        
+        // 3. REASONING & THINKING MODELS (The <think> tag generators)
         // DeepSeek-R1 Distilled onto Qwen architecture (The most popular right now)
         "deepseek-r1:7b" | "deepseek-r1-qwen:7b" => Some(ModelAsset::Gguf {
             gguf_repo: "bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF",
@@ -821,13 +814,13 @@ pub fn get_model_map(alias: &str) -> Option<ModelAsset> {
         // -------------------------------------------------------------
         // ⚠️ ORE V0.1 LIMITATION: SHARDED & MULTIMODAL MODELS
         // -------------------------------------------------------------
-        // Models like Llama-4 (Scout/Maverick) and Qwen3-VL ship as 
-        // multi-part SHARDED GGUF files and require separate mmproj 
-        // vision encoders. 
-        // 
-        // The ORE NativeDriver currently expects a single contiguous 
-        // Memory Map (`mmap`). Sharded models are temporarily disabled 
-        // in `ore pull` until Phase 4 (The FUSE Virtual Filesystem) 
+        // Models like Llama-4 (Scout/Maverick) and Qwen3-VL ship as
+        // multi-part SHARDED GGUF files and require separate mmproj
+        // vision encoders.
+        //
+        // The ORE NativeDriver currently expects a single contiguous
+        // Memory Map (`mmap`). Sharded models are temporarily disabled
+        // in `ore pull` until Phase 4 (The FUSE Virtual Filesystem)
         // is implemented. Use the Ollama Engine to run these models.
         // -------------------------------------------------------------
 
@@ -869,20 +862,34 @@ pub async fn download_with_progress(
 
     let res = req.send().await?;
 
-    if res.status() == reqwest::StatusCode::UNAUTHORIZED || res.status() == reqwest::StatusCode::FORBIDDEN {
-        println!("\n{} {}", "[-]".red().bold(), "ACCESS DENIED: Hugging Face License Gate".red().bold());
-        
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED
+        || res.status() == reqwest::StatusCode::FORBIDDEN
+    {
+        println!(
+            "\n{} {}",
+            "[-]".red().bold(),
+            "ACCESS DENIED: Hugging Face License Gate".red().bold()
+        );
+
         if token.is_some() {
             println!("    [!] Your HF_TOKEN was detected, but access was still denied.");
-            println!("    This usually means you haven't clicked 'Agree' on the specific model's page,");
+            println!(
+                "    This usually means you haven't clicked 'Agree' on the specific model's page,"
+            );
             println!("    or your token is invalid/expired.\n");
         } else {
-            println!("    This model (e.g., Llama, Gemma) is gated by its creator and requires an HF_TOKEN.");
-            println!("    Fully open models like Qwen do NOT require this. (Try: `ore pull qwen2.5:1.5b`)\n");
+            println!(
+                "    This model (e.g., Llama, Gemma) is gated by its creator and requires an HF_TOKEN."
+            );
+            println!(
+                "    Fully open models like Qwen do NOT require this. (Try: `ore pull qwen2.5:1.5b`)\n"
+            );
         }
-        
+
         println!("    To unlock gated models:");
-        println!("    1. Go to the model's page on Hugging Face (e.g., huggingface.co/meta-llama) and click 'Agree'");
+        println!(
+            "    1. Go to the model's page on Hugging Face (e.g., huggingface.co/meta-llama) and click 'Agree'"
+        );
         println!("    2. Get your access token from https://huggingface.co/settings/tokens");
         println!("    3. Set it in your terminal:");
         println!("       - Linux/macOS: export HF_TOKEN=\"your_token_here\"");

@@ -290,7 +290,10 @@ pub async fn compact_memory(
     format!("SUCCESS: Memory for Agent '{}' manually compacted.", app_id)
 }
 
-pub async fn clear_memory(State(state): State<Arc<KernelState>>, Path(app_id): Path<String>) -> String {
+pub async fn clear_memory(
+    State(state): State<Arc<KernelState>>,
+    Path(app_id): Path<String>,
+) -> String {
     kprintln!(
         "-> [KERNEL COMMAND] Wiping SSD Memory for Agent '{}'",
         app_id
@@ -306,22 +309,25 @@ pub async fn clear_memory(State(state): State<Arc<KernelState>>, Path(app_id): P
 pub async fn top_telemetry(State(state): State<Arc<KernelState>>) -> String {
     let scheduler_status = state.scheduler.get_status().await;
     let apps_count = state.registry.list_apps().len();
-    
-    let mut output = format!("=== ORE KERNEL TELEMETRY ===\n");
+
+    let mut output = "=== ORE KERNEL TELEMETRY ===\n".to_string();
     output.push_str(&format!("{:<20} | Status\n", "Subsystem"));
     output.push_str(&format!("{:<20} | ------\n", "-------------------"));
-    output.push_str(&format!("{:<20} | ACTIVE\n", format!("Driver ({})", state.driver.engine_name())));
-    output.push_str(&format!("{:<20} | {}\n", "Scheduler (VRAM)", scheduler_status));
+    output.push_str(&format!(
+        "{:<20} | ACTIVE\n",
+        format!("Driver ({})", state.driver.engine_name())
+    ));
+    output.push_str(&format!(
+        "{:<20} | {}\n",
+        "Scheduler (VRAM)", scheduler_status
+    ));
     output.push_str(&format!("{:<20} | ENFORCING\n", "Context Firewall"));
     output.push_str(&format!("{:<20} | {}\n", "Connected Apps", apps_count));
-    
+
     output
 }
 
-pub async fn kill_app(
-    State(state): State<Arc<KernelState>>,
-    Path(app_id): Path<String>,
-) -> String {
+pub async fn kill_app(State(state): State<Arc<KernelState>>, Path(app_id): Path<String>) -> String {
     ore_core::kprintln!(
         "-> [KERNEL COMMAND] SIGTERM received for Agent '{}'",
         app_id

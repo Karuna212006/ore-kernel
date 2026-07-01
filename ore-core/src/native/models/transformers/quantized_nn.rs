@@ -1,6 +1,6 @@
+use super::quantized_var_builder::VarBuilder;
 use candle_core::quantized::QTensor;
 use candle_core::{Module, Result, Tensor};
-use super::quantized_var_builder::VarBuilder;
 
 #[derive(Debug, Clone)]
 pub struct RmsNorm {

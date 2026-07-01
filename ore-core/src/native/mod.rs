@@ -127,9 +127,9 @@ impl InferenceDriver for NativeDriver {
             let needs_agent_swap = is_same_model && !is_same_agent;
 
             // 1. FREEZE OLD STATE TO SSD (If ANY switch is happening)
-            if (needs_model_reload && state.is_some()) || needs_agent_swap {
-                if let Some(active) = state.as_mut() {
-                    if active.stateful_paging {
+            if ((needs_model_reload && state.is_some()) || needs_agent_swap)
+                && let Some(active) = state.as_mut()
+                    && active.stateful_paging {
                         println!(
                             "-> [NATIVE DRIVER] Lazy Eviction: Freezing Agent '{}' Brain State to SSD...",
                             active.current_app_id
@@ -150,8 +150,6 @@ impl InferenceDriver for NativeDriver {
                             );
                         }));
                     }
-                }
-            }
 
             // 2. APPLY THE NEW STATE
             if needs_model_reload {
@@ -208,11 +206,11 @@ impl InferenceDriver for NativeDriver {
                     let cache = crate::native::kv_manager::KvManager::unflatten_cache(&frozen_tensors, active.model.num_layers());
                     // Inject directly into the Engine's brain!
                     active.model.set_kv_cache(cache);
-                    current_cache_len = active.model.get_kv_cache_len(); 
+                    current_cache_len = active.model.get_kv_cache_len();
                     kprintln!("-> [NATIVE DRIVER] KV-Cache injected ({} tokens). Bypassing Prefill.", current_cache_len);
                 } else {
                     kprintln!("-> [NATIVE DRIVER] No valid KV-Cache found. Rebuilding brain from JSON history.");
-                    active.model.clear_kv_cache();                 
+                    active.model.clear_kv_cache();
                 }
             } else {
                 // If paging is off, ensure we start with a clean brain!
@@ -220,7 +218,7 @@ impl InferenceDriver for NativeDriver {
             }
 
             let formatted_prompt = (active.config.formatter)(
-                history_clone.as_deref().unwrap_or(&[]), 
+                history_clone.as_deref().unwrap_or(&[]),
                 &safe_prompt,
             );
 
@@ -265,7 +263,7 @@ impl InferenceDriver for NativeDriver {
             for index in 0..8192 {
 
                 let input_len = if index == 0 { unprocessed_tokens.len() } else { 1 };
-                
+
                 if input_len == 0 { break; } // Edge case protection
 
                 // Create the tensor instantly without holding a slice reference open!
@@ -284,7 +282,7 @@ impl InferenceDriver for NativeDriver {
                 };
 
                 let logits = active.model.forward(&input_tensor, start_pos).unwrap();
-                
+
                 let logits = logits
                     .squeeze(0)
                     .unwrap()
@@ -312,7 +310,7 @@ impl InferenceDriver for NativeDriver {
             drop(tx);
 
             active.last_used = std::time::Instant::now();
-            
+
             Ok(())
         })
         .await
@@ -447,8 +445,8 @@ impl InferenceDriver for NativeDriver {
         let mut eviction_task = None;
         {
             let mut state = self.engine.lock().unwrap();
-            if let Some(active) = state.as_ref() {
-                if active.last_used.elapsed().as_secs() > idle_timeout_mins * 60 {
+            if let Some(active) = state.as_ref()
+                && active.last_used.elapsed().as_secs() > idle_timeout_mins * 60 {
                     println!(
                         "-> [NATIVE DRIVER] Idle Timeout ({} mins) reached for '{}'. Evicting from RAM...",
                         idle_timeout_mins, active.current_app_id
@@ -472,7 +470,6 @@ impl InferenceDriver for NativeDriver {
                     }
                     *state = None; // Drop the engine entirely to free RAM/VRAM
                 }
-            }
         }
         if let Some(task) = eviction_task {
             let _ = task.await;
@@ -483,8 +480,8 @@ impl InferenceDriver for NativeDriver {
     async fn invalidate_agent_cache(&self, app_id: &str) -> Result<(), DriverError> {
         let mut state = self.engine.lock().unwrap();
 
-        if let Some(active) = state.as_mut() {
-            if active.current_app_id == app_id {
+        if let Some(active) = state.as_mut()
+            && active.current_app_id == app_id {
                 println!(
                     "-> [NATIVE DRIVER] Surgical Cache Invalidation: Wiping RAM KV-Cache for '{}'...",
                     app_id
@@ -499,7 +496,6 @@ impl InferenceDriver for NativeDriver {
                     "-> [NATIVE DRIVER] KV-Cache wiped. Model Weights safely retained in RAM."
                 );
             }
-        }
         Ok(())
     }
 }

@@ -70,7 +70,12 @@ async fn main() {
         }
         Commands::Top => {
             println!("{} Fetching Kernel Telemetry...", "[*]".bright_blue());
-            match client.unwrap().get(format!("{}/top", kernel_url)).send().await {
+            match client
+                .unwrap()
+                .get(format!("{}/top", kernel_url))
+                .send()
+                .await
+            {
                 Ok(response) => println!("\n{}", response.text().await.unwrap_or_default()),
                 Err(_) => println!("{} ORE Kernel is offline.", "[-]".red()),
             }
@@ -333,32 +338,54 @@ async fn main() {
                     prompt: p.clone(),
                 };
 
-                let res =  client
+                let res = client
                     .unwrap()
                     .post(format!("{}/run", kernel_url))
                     .json(&payload)
                     .send()
                     .await
                     .unwrap();
-                
+
                 println!();
                 let mut stream = res.bytes_stream();
                 while let Some(chunk) = stream.next().await {
                     if let Ok(bytes) = chunk {
                         let text = String::from_utf8_lossy(&bytes);
-                        if text.starts_with("ORE KERNEL ALERT") { print!("{}", text.red().bold()); } 
-                        else { print!("{}", text); } // Standard terminal color for easy reading!
+                        if text.starts_with("ORE KERNEL ALERT") {
+                            print!("{}", text.red().bold());
+                        } else {
+                            print!("{}", text);
+                        } // Standard terminal color for easy reading!
                         use std::io::Write;
                         std::io::stdout().flush().unwrap();
                     }
                 }
                 println!("\n");
             } else {
-                println!("\n{}", "╭──────────────────────────────────────────╮".bright_black());
-                println!("{}  {}                             {}", "│".bright_black(), "ORE SESSION", "│".bright_black());
-                println!("{}  Model: {:<32} {}", "│".bright_black(), model.yellow(), "│".bright_black());
-                println!("{}  Type '/e' or '/exit' to disconnect      {}", "│".bright_black(), "│".bright_black());
-                println!("{}", "╰──────────────────────────────────────────╯\n".bright_black());
+                println!(
+                    "\n{}",
+                    "╭──────────────────────────────────────────╮".bright_black()
+                );
+                println!(
+                    "{}  ORE SESSION                             {}",
+                    "│".bright_black(),
+                    "│".bright_black()
+                );
+                println!(
+                    "{}  Model: {:<32} {}",
+                    "│".bright_black(),
+                    model.yellow(),
+                    "│".bright_black()
+                );
+                println!(
+                    "{}  Type '/e' or '/exit' to disconnect      {}",
+                    "│".bright_black(),
+                    "│".bright_black()
+                );
+                println!(
+                    "{}",
+                    "╰──────────────────────────────────────────╯\n".bright_black()
+                );
 
                 let c = client.unwrap();
 
@@ -375,7 +402,7 @@ async fn main() {
                     let prompt_text = format!("{}", ">>>".bright_black().bold());
                     let input_result = inquire::Text::new(&prompt_text)
                         .with_placeholder(" Send a message...")
-                        .with_render_config(render_config.clone())
+                        .with_render_config(render_config)
                         .prompt();
 
                     let trimmed = match input_result {
@@ -392,18 +419,26 @@ async fn main() {
                         break;
                     }
 
-                    if trimmed.is_empty() { 
+                    if trimmed.is_empty() {
                         // Move cursor back up if they just hit enter blindly
-                        print!("\x1B[1A\x1B[2K"); 
-                        continue; 
+                        print!("\x1B[1A\x1B[2K");
+                        continue;
                     }
 
-                    let payload = RunPayload { app_id: "terminal_user".to_string(), model: model.clone(), prompt: trimmed.to_string() };
+                    let payload = RunPayload {
+                        app_id: "terminal_user".to_string(),
+                        model: model.clone(),
+                        prompt: trimmed.to_string(),
+                    };
 
-                    match c.post(format!("{}/run", kernel_url)).json(&payload).send().await {
+                    match c
+                        .post(format!("{}/run", kernel_url))
+                        .json(&payload)
+                        .send()
+                        .await
+                    {
                         Ok(response) => {
                             if response.status().is_success() {
-
                                 let mut stream = response.bytes_stream();
 
                                 let mut is_thinking = false;
@@ -414,8 +449,8 @@ async fn main() {
                                         if text.starts_with("ORE KERNEL ALERT") {
                                             print!("{}", text.red().bold());
                                             continue;
-                                        } 
-                                        
+                                        }
+
                                         // Check for Thinking Tags - Thinking machine handling internal monologue vs final answer rendering
                                         if text.contains("<think>") {
                                             is_thinking = true;

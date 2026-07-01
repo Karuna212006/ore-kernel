@@ -22,9 +22,7 @@
 //! - Added the `SystemEmbedder` OS wrapper for the Semantic Bus integration.
 //! -------------------------------------------------------------------------
 
-use super::utils::with_tracing::{
-    LayerNorm, Linear, layer_norm, linear, linear_no_bias,
-};
+use super::utils::with_tracing::{LayerNorm, Linear, layer_norm, linear, linear_no_bias};
 use candle_core::{D, DType, Device, Result, Tensor};
 use candle_nn::{Embedding, Module, VarBuilder, embedding};
 use serde::Deserialize;

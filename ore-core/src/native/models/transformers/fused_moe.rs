@@ -1,7 +1,7 @@
 // Adapted from: https://github.com/guoqingbao/vllm.rs/blob/main/src/models/layers/moe.rs
 use candle_core::Module;
-use candle_core::{quantized::QTensor, DType, Result, Tensor, D};
-use candle_nn::{linear_no_bias, moe, Activation, Linear, VarBuilder};
+use candle_core::{D, DType, Result, Tensor, quantized::QTensor};
+use candle_nn::{Activation, Linear, VarBuilder, linear_no_bias, moe};
 use std::sync::Arc;
 
 pub struct MoeCfg {

@@ -243,7 +243,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
                     Pager::page_out_history(&m_id, &compacted_history);
 
                     // CRITICAL: We must delete the old .safetensors KV-cache because the sequence of tokens just fundamentally changed!
-                    if manifest.resources.stateful_paging { 
+                    if manifest.resources.stateful_paging {
                         Pager::delete_kv_cache(&m_id);
                         let _ = driver_clone.invalidate_agent_cache(&m_id).await;
                         kprintln!("-> [COMPACTION] KV-Cache invalidated and erased from disk.");
@@ -286,7 +286,7 @@ pub async fn run_process(
     State(state): State<Arc<KernelState>>,
     Json(payload): Json<RunRequest>,
 ) -> Response {
-    let app_id_owned = payload.app_id.clone(); 
+    let app_id_owned = payload.app_id.clone();
 
     let app_id = app_id_owned.as_str();
 
@@ -367,7 +367,15 @@ pub async fn run_process(
 
         let gen_task = tokio::spawn(async move {
             if let Err(e) = driver_inner
-                .generate_text(&m_name, &a_id, is_stateful, &p_text, ctx, tx_driver, &current_fingerprint)
+                .generate_text(
+                    &m_name,
+                    &a_id,
+                    is_stateful,
+                    &p_text,
+                    ctx,
+                    tx_driver,
+                    &current_fingerprint,
+                )
                 .await
             {
                 kprintln!("-> [KERNEL ERROR] Inference execution failed: {}", e);

@@ -16,12 +16,12 @@
 //! ![](https://raw.githubusercontent.com/huggingface/candle/main/candle-examples/examples/quantized/assets/aoc.gif)
 //!
 
-use crate::native::engine::{ModelConfig, OreEngine};
-use crate::swap::ContextMessage;
 use super::llama::ModelWeights as LlamaModel;
 use super::nn::kv_cache::ConcatKvCache;
+use crate::native::engine::{ModelConfig, OreEngine};
+use crate::swap::ContextMessage;
 use candle_core::quantized::QTensor;
-use candle_core::quantized::{gguf_file};
+use candle_core::quantized::gguf_file;
 use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use candle_nn::{Embedding, Module};
 use candle_transformers::quantized_nn::RmsNorm;
@@ -36,12 +36,11 @@ pub fn load<R: Read + Seek>(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> anyhow::Result<(OreEngine, ModelConfig)> {
-    
     let arch_name = match model_content.metadata.get("general.architecture") {
         Some(candle_core::quantized::gguf_file::Value::String(s)) => s.clone(),
         _ => "llama".to_string(), // Fallback
     };
-    
+
     let m = LlamaModel::from_gguf(model_content, reader, device)?;
 
     let mut stop_tokens = vec![128001, 128009];
@@ -585,7 +584,10 @@ impl ModelWeights {
     }
 
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
-        self.layers.iter().map(|l| l.kv_cache.get_tensors()).collect()
+        self.layers
+            .iter()
+            .map(|l| l.kv_cache.get_tensors())
+            .collect()
     }
 
     pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
@@ -601,15 +603,14 @@ impl ModelWeights {
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
             let c = &mut layer.kv_cache;
-            if c.current_seq_len() > len {
-                if let Some((k, v)) = c.get_tensors() {
+            if c.current_seq_len() > len
+                && let Some((k, v)) = c.get_tensors() {
                     let dim = c.dim();
                     c.set_tensors(
                         k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap()
+                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
                     );
                 }
-            }
         }
     }
 }

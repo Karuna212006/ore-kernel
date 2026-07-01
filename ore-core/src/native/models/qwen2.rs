@@ -13,10 +13,10 @@
 //! - [Model Card](https://huggingface.co/Qwen/Qwen2)
 //!
 
+use super::nn::kv_cache::ConcatKvCache;
+use super::qwen2::ModelWeights as Qwen2Model;
 use crate::native::engine::{ModelConfig, OreEngine};
 use crate::swap::ContextMessage;
-use super::qwen2::ModelWeights as Qwen2Model;
-use super::nn::kv_cache::ConcatKvCache;
 use candle_core::{
     DType, Device, IndexOp, Result, Tensor,
     quantized::{QMatMul, gguf_file},
@@ -402,7 +402,10 @@ impl ModelWeights {
     }
 
     pub fn get_kv_cache(&self) -> Vec<Option<(Tensor, Tensor)>> {
-        self.layers.iter().map(|l| l.kv_cache.get_tensors()).collect()
+        self.layers
+            .iter()
+            .map(|l| l.kv_cache.get_tensors())
+            .collect()
     }
 
     pub fn set_kv_cache(&mut self, cache: Vec<Option<(Tensor, Tensor)>>) {
@@ -418,15 +421,14 @@ impl ModelWeights {
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
             let c = &mut layer.kv_cache;
-            if c.current_seq_len() > len {
-                if let Some((k, v)) = c.get_tensors() {
+            if c.current_seq_len() > len
+                && let Some((k, v)) = c.get_tensors() {
                     let dim = c.dim();
                     c.set_tensors(
                         k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap()
+                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
                     );
                 }
-            }
         }
     }
 }
