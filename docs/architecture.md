@@ -105,7 +105,7 @@ Client (curl / CLI / App)
 └──────────────┬──────────────────────┘
                ▼
 ┌─────────────────────────────────────┐
-│ 4. SSD PAGER (if stateful)          │  ore-core/src/swap.rs
+│ 4. SSD PAGER (if stateful)          │  ore-core/src/memory.rs
 │    Pager::page_in_history()         │
 │    Pager::page_in_kv_cache()        │
 │    Append new message to context    │
@@ -164,7 +164,7 @@ ore-system/
 │   ├── firewall.rs          Context firewall (PII, injection, boundary)
 │   ├── ipc.rs               MessageBus, SemanticBus, RateLimiter
 │   ├── scheduler.rs         GpuScheduler with RAII GpuLease
-│   ├── swap.rs              SSD Pager (context persistence)
+│   ├── memory.rs              SSD Pager (context persistence)
 │   ├── registry.rs          App manifest registry
 │   ├── external/            External inference drivers
 │   │   └── ollama.rs        OllamaDriver (HTTP proxy)
@@ -193,7 +193,7 @@ ore-system/
 │   └── utils.rs             HTTP helpers, token reader
 ├── manifests/               App permission manifests (.toml files)
 ├── models/                  Downloaded model weights
-├── swap/                    SSD page files for agent context
+├── memory/                    SSD page files for agent context
 ├── ore.toml                 System configuration
 ├── Cargo.toml               Workspace config + release profile
 └── rust-toolchain.toml      Pinned Rust 1.93.0
@@ -205,7 +205,7 @@ ore-system/
 
 2. **Zero-Copy Architecture** - The Native Engine achieves sub-50ms instant boot times by utilizing `memmap2` to stream weights directly from the SSD to the GPU, bypassing system RAM bottlenecks. Additionally, the GPU scheduler detects when the requested model is already loaded (hot-swap) and shares the instance instead of reloading. RAII-based `GpuLease` ensures the semaphore is always released, even on panics.
 
-3. **OS-Style Memory Management & Resource Limits** - Idle agent context is paged to SSD (`swap/` directory) and restored on demand. The kernel strictly enforces `memory_limits` to prevent OOM crashes (setting explicit caps on KV-cache VRAM and JSON context tokens) by triggering automatic background memory compaction. The `SemanticBus` can transparently freeze vector pipelines to SSD (`.pipe` files) and runs hourly garbage collection to evict stale embeddings.
+3. **OS-Style Memory Management & Resource Limits** - Idle agent context is paged to SSD (`memory/` directory) and restored on demand. The kernel strictly enforces `memory_limits` to prevent OOM crashes (setting explicit caps on KV-cache VRAM and JSON context tokens) by triggering automatic background memory compaction. The `SemanticBus` can transparently freeze vector pipelines to SSD (`.pipe` files) and runs hourly garbage collection to evict stale embeddings.
 
 4. **Driver Abstraction** - The `InferenceDriver` trait decouples all kernel logic from the physical inference engine. Swap between Native Candle and Ollama with a single config change. Add new backends by implementing 9 trait methods.
 

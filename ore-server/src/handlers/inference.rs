@@ -8,7 +8,7 @@ use axum::{
 };
 use ore_core::firewall::ContextFirewall;
 use ore_core::kprintln;
-use ore_core::swap::Pager;
+use ore_core::memory::Pager;
 use std::sync::Arc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
@@ -95,11 +95,11 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
 
     if manifest.resources.json_history {
         let mut new_history = current_context.unwrap_or_default();
-        new_history.push(ore_core::swap::ContextMessage {
+        new_history.push(ore_core::memory::ContextMessage {
             role: "user".to_string(),
             content: secured_gpu_prompt.clone(),
         });
-        new_history.push(ore_core::swap::ContextMessage {
+        new_history.push(ore_core::memory::ContextMessage {
             role: "assistant".to_string(),
             content: full_response.clone(),
         });
@@ -203,7 +203,7 @@ pub async fn ask_ai(State(state): State<Arc<KernelState>>, Path(prompt): Path<St
 
                     // REWRITE THE BRAIN
                     let mut compacted_history = Vec::new();
-                    compacted_history.push(ore_core::swap::ContextMessage {
+                    compacted_history.push(ore_core::memory::ContextMessage {
                         role: "system".to_string(),
                         content: format!(
                             "You are a helpful AI assistant. Previous context summary: {}",
@@ -392,11 +392,11 @@ pub async fn run_process(
 
         if is_json_history {
             let mut new_history = current_context.unwrap_or_default();
-            new_history.push(ore_core::swap::ContextMessage {
+            new_history.push(ore_core::memory::ContextMessage {
                 role: "user".to_string(),
                 content: prompt.clone(),
             });
-            new_history.push(ore_core::swap::ContextMessage {
+            new_history.push(ore_core::memory::ContextMessage {
                 role: "assistant".to_string(),
                 content: full_response.clone(),
             });
@@ -488,7 +488,7 @@ pub async fn run_process(
                     }
 
                     let mut compacted_history = Vec::new();
-                    compacted_history.push(ore_core::swap::ContextMessage {
+                    compacted_history.push(ore_core::memory::ContextMessage {
                         role: "system".to_string(),
                         content: format!(
                             "You are a helpful AI assistant. Previous context summary:\n{}",

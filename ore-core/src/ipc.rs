@@ -275,10 +275,11 @@ impl SemanticBus {
     ) -> Vec<(f32, Arc<MemoryChunk>)> {
         // 1. PAGE FAULT (Safe because handler already verified manifest permissions)
         if !self.memory_pipes.contains_key(pipe_name)
-            && let Some(restored_pipe) = crate::swap::Pager::page_in_semantic(pipe_name) {
-                self.memory_pipes
-                    .insert(pipe_name.to_string(), (true, restored_pipe));
-            }
+            && let Some(restored_pipe) = crate::memory::Pager::page_in_semantic(pipe_name)
+        {
+            self.memory_pipes
+                .insert(pipe_name.to_string(), (true, restored_pipe));
+        }
 
         if let Some(pipe) = self.memory_pipes.get(pipe_name) {
             let current_time = SystemTime::now()

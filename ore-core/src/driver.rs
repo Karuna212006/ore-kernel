@@ -1,4 +1,4 @@
-use crate::swap::ContextMessage;
+use crate::memory::ContextMessage;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;

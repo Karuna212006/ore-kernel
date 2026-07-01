@@ -194,9 +194,9 @@ A modular bare-metal inference engine powered by Hugging Face's [Candle](https:/
 - **Streaming Token Generation** - Generates tokens one-at-a-time via `tokio::sync::mpsc`, enabling real-time streaming to the CLI.
 - **Native System Embedders** - A built-in `SystemEmbedder` (`ore-core/src/native/models/bert.rs` and `nomic.rs`) that loads architectures like BERT and Nomic v1.5 from Safetensors for embedding generation. Implements masked mean pooling and L2 normalization entirely in Rust. The embedder is serialized via a strict `embedder_lock` mutex to prevent multi-agent OOM crashes. When the embedding thread completes, Rust's ownership model automatically drops the model and frees all RAM to 0MB idle.
 
-**SSD Pager** (`ore-core/src/swap.rs`)
+**SSD Pager** (`ore-core/src/memory.rs`)
 An OS-style page file system for true KV-Cache paging and agent conversation context:
-- **Page Out** - Serializes an agent's full chat history (`Vec<ContextMessage>`) to JSON and freezes its true physical Attention Key-Value (KV) Cache directly to the SSD (`swap/` directory).
+- **Page Out** - Serializes an agent's full chat history (`Vec<ContextMessage>`) to JSON and freezes its true physical Attention Key-Value (KV) Cache directly to the SSD (`memory/` directory).
 - **Page In** - Restores frozen chat context and true physical KV-Cache back into RAM/VRAM on the next request, enabling multi-turn conversations across kernel restarts without latency-heavy prompt re-processing.
 - **Background Memory Compaction** - The kernel monitors memory limits and automatically performs lazy eviction of stale KV-caches to prevent VRAM/SSD bloat, safely falling back to JSON summarization when caps are reached.
 - **Clear Page** - Wipes an agent's frozen memory on demand via `ore clear <app_id>`.
@@ -315,7 +315,7 @@ ore-system/
 │   ├── firewall.rs          #   ├── Context firewall (PII, injection, boundary)
 │   ├── ipc.rs               #   ├── MessageBus, SemanticBus (w/ cache + GC), RateLimiter
 │   ├── scheduler.rs         #   ├── GpuScheduler with RAII GpuLease + VRAM state
-│   ├── swap.rs              #   ├── SSD Pager (context freezing & restoration)
+│   ├── memory.rs              #   ├── SSD Pager (context freezing & restoration)
 │   ├── registry.rs          #   ├── App manifest registry (TOML loader + cache)
 │   ├── external/            #   ├── External inference drivers
 │   │   └── ollama.rs        #   │   └── OllamaDriver (HTTP proxy to Ollama daemon)
@@ -348,7 +348,7 @@ ore-system/
 │   ├── web_tool.toml
 │   └── web_toolkit.toml
 ├── models/                  # Downloaded model weights (per-model directories)
-├── swap/                    # SSD page files for agent context persistence
+├── memory/                  # Context history and SSD page files for agent context persistence
 ├── ore.toml                 # System configuration (engine + memory GC settings)
 ├── rust-toolchain.toml      # Pinned Rust version (1.93.0)
 ├── Cargo.toml               # Workspace configuration + release profile

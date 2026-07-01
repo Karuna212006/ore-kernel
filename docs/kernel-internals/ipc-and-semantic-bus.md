@@ -207,7 +207,7 @@ The Semantic Bus generally operates entirely in RAM for maximum speed. However, 
 semantic_persistence = true
 ```
 
-When enabled, the IPC handler layer spawns an asynchronous Tokio thread upon any knowledge ingestion (`/ipc/share`), grabbing the updated vector pipeline from RAM and flushing it to the SSD (`swap/<pipe_name>.pipe`) via `Pager::page_out_semantic`. This enables persistence across kernel reboots without blocking the HTTP API.
+When enabled, the IPC handler layer spawns an asynchronous Tokio thread upon any knowledge ingestion (`/ipc/share`), grabbing the updated vector pipeline from RAM and flushing it to the SSD (`memory/<pipe_name>.pipe`) via `Pager::page_out_semantic`. This enables persistence across kernel reboots without blocking the HTTP API.
 
 ---
 

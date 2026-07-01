@@ -198,18 +198,19 @@ pub async fn run_manifest_wizard(app_id: &String, client: &Client) {
 
         let mut available_models = Vec::new();
         if let Ok(res) = client.get("http://127.0.0.1:6767/ls").send().await
-            && let Ok(text) = res.text().await {
-                for line in text.lines().skip(2) {
-                    if line.starts_with("No models") || line.is_empty() {
-                        continue;
-                    }
-                    if let Some(model_name) = line.split('|').next() {
-                        available_models.push(model_name.trim().to_string());
-                    }
+            && let Ok(text) = res.text().await
+        {
+            for line in text.lines().skip(2) {
+                if line.starts_with("No models") || line.is_empty() {
+                    continue;
+                }
+                if let Some(model_name) = line.split('|').next() {
+                    available_models.push(model_name.trim().to_string());
                 }
             }
+        }
 
-        let selected_models_formatted= if available_models.is_empty() {
+        let selected_models_formatted = if available_models.is_empty() {
             println!(
                 "{} No installed models detected. Type them manually.",
                 "ℹ".blue()

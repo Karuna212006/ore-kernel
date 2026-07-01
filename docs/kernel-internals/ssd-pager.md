@@ -2,7 +2,7 @@
 
 > OS-style page files for agent conversation history.
 
-**Source:** [`ore-core/src/swap.rs`](../../ore-core/src/swap.rs)
+**Source:** [`ore-core/src/memory.rs`](../../ore-core/src/memory.rs)
 
 ---
 
@@ -45,7 +45,7 @@ pub fn page_out_history(app_id: &str, history: &Vec<ContextMessage>) {
 }
 ```
 
-Serializes the agent's full chat history to `swap/<app_id>.json` as pretty-printed JSON. Called **after** every inference response.
+Serializes the agent's full chat history to `memory/<app_id>.json` as pretty-printed JSON. Called **after** every inference response.
 
 ### Page In (SSD → RAM)
 
@@ -71,7 +71,7 @@ The Pager also handles the physical AI memory state—the Attention Key-Value (K
 
 ```rust
 pub fn page_out_kv_cache(app_id: &str, model_name: &str, tensors: &HashMap<String, Tensor>) {
-    // Saves raw math matrices to swap/<app_id>_<model_name>.safetensors
+    // Saves raw math matrices to memory/<app_id>_<model_name>.safetensors
 }
 
 pub fn page_in_kv_cache(app_id: &str, model_name: &str, device: &Device) -> Option<HashMap<String, Tensor>> {
@@ -125,7 +125,7 @@ When an agent's manifest has `semantic_persistence = true`, the kernel spawns a 
 
 ## Swap File Formats
 
-The pager generates three types of files in the `swap/` directory:
+The pager generates three types of files in the `memory/` directory:
 
 ### 1. JSON History (`<app_id>.json`)
 Stores the raw conversation thread. Human-readable and cross-platform:
@@ -171,7 +171,7 @@ When `stateful_paging = false` (default), the handler skips the page-in/page-out
 
 ## Design Decisions
 
-- **JSON, not binary (for chat history)** - Swap files are human-readable on purpose. This makes debugging agent memory trivial (`cat swap/openclaw.json`) and keeps the format cross-platform.
+- **JSON, not binary (for chat history)** - Swap files are human-readable on purpose. This makes debugging agent memory trivial (`cat memory/openclaw.json`) and keeps the format cross-platform.
 - **Bincode for Semantic Pipes** - Semantic memory vectors are written as `.pipe` files using Bincode, as Bincode freezes the RAM structure into pure 1s and 0s instantly, allowing high-performance mapping.
 - **Synchronous I/O** - The pager uses `std::fs` (sync) rather than `tokio::fs` (async) for history. Swap files are small (kilobytes), and adding async here would complicate the code path for negligible latency savings. (Semantic persistence runs in a background thread).
 - **Eager writes** - History is paged out after every response, not batched. This means agent context survives even if the kernel crashes unexpectedly.

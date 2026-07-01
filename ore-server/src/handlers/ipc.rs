@@ -8,7 +8,7 @@ use axum::{
 };
 use ore_core::ipc::{AgentMessage, SemanticBus};
 use ore_core::kprintln;
-use ore_core::swap::Pager;
+use ore_core::memory::Pager;
 use std::sync::Arc;
 
 pub async fn sys_share_context(

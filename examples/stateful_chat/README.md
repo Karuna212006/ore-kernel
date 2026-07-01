@@ -34,7 +34,7 @@ Turn 1:
                                       ├── firewall(prompt)
                                       ├── scheduler.request_gpu()
                                       ├── driver.generate_text(history=[user: "hello"])
-                                      └── page_out("openclaw") → swap/openclaw.json
+                                      └── page_out("openclaw") → memory/openclaw.json
 
 Turn 2:
   chat.py  ──▶  GET /ask/what_did_i_say  ──▶  Kernel
@@ -42,7 +42,7 @@ Turn 2:
                                                ├── page_in("openclaw")  → [{user: "hello"}, {bot: "..."}]
                                                ├── firewall(prompt)
                                                ├── generate_text(history=[...full context...])
-                                               └── page_out("openclaw") → swap/openclaw.json (updated)
+                                               └── page_out("openclaw") → memory/openclaw.json (updated)
 ```
 
 ## Files

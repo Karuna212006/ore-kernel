@@ -1,7 +1,7 @@
 use crate::state::KernelState;
 use axum::extract::{Path, State};
 use ore_core::kprintln;
-use ore_core::swap::Pager;
+use ore_core::memory::Pager;
 use std::sync::Arc;
 
 pub async fn health_check(State(state): State<Arc<KernelState>>) -> String {
@@ -268,7 +268,7 @@ pub async fn compact_memory(
     drop(lease); // Release GPU
 
     let mut compacted_history = Vec::new();
-    compacted_history.push(ore_core::swap::ContextMessage {
+    compacted_history.push(ore_core::memory::ContextMessage {
         role: "system".to_string(),
         content: format!(
             "You are a helpful AI assistant. Previous context summary:\n{}",

@@ -15,8 +15,8 @@
 
 use super::nn::kv_cache::ConcatKvCache;
 use super::qwen2::ModelWeights as Qwen2Model;
+use crate::memory::ContextMessage;
 use crate::native::engine::{ModelConfig, OreEngine};
-use crate::swap::ContextMessage;
 use candle_core::{
     DType, Device, IndexOp, Result, Tensor,
     quantized::{QMatMul, gguf_file},
@@ -422,13 +422,14 @@ impl ModelWeights {
         for layer in self.layers.iter_mut() {
             let c = &mut layer.kv_cache;
             if c.current_seq_len() > len
-                && let Some((k, v)) = c.get_tensors() {
-                    let dim = c.dim();
-                    c.set_tensors(
-                        k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                    );
-                }
+                && let Some((k, v)) = c.get_tensors()
+            {
+                let dim = c.dim();
+                c.set_tensors(
+                    k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                    v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                );
+            }
         }
     }
 }

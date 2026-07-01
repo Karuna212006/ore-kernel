@@ -4,8 +4,8 @@ use super::transformers::fused_moe::{FusedMoeGGUF, MoeCfg};
 use super::transformers::quantized_nn::RmsNorm;
 use super::utils::repeat_kv;
 use super::utils::with_tracing::QMatMul;
+use crate::memory::ContextMessage;
 use crate::native::engine::{ModelConfig, OreEngine};
-use crate::swap::ContextMessage;
 use candle_core::quantized::gguf_file;
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::Linear;
@@ -543,13 +543,14 @@ impl GGUFQWenMoE {
     pub fn truncate_kv_cache(&mut self, len: usize) {
         for layer in self.layers.iter_mut() {
             if layer.self_attn.kv_cache.current_seq_len() > len
-                && let Some((k, v)) = layer.self_attn.kv_cache.get_tensors() {
-                    let dim = layer.self_attn.kv_cache.dim();
-                    layer.self_attn.kv_cache.set_tensors(
-                        k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                    );
-                }
+                && let Some((k, v)) = layer.self_attn.kv_cache.get_tensors()
+            {
+                let dim = layer.self_attn.kv_cache.dim();
+                layer.self_attn.kv_cache.set_tensors(
+                    k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                    v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                );
+            }
         }
     }
 }

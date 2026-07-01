@@ -1,5 +1,5 @@
 use crate::driver::{DriverError, InferenceDriver, LocalModel, VramProcess};
-use crate::swap::ContextMessage;
+use crate::memory::ContextMessage;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;

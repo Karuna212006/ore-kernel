@@ -18,7 +18,7 @@ pub struct ContextMessage {
 pub struct Pager;
 
 impl Pager {
-    const SWAP_DIR: &'static str = "../swap";
+    const SWAP_DIR: &'static str = "../memory";
 
     pub fn ensure_swap_drive() {
         if !Path::new(Self::SWAP_DIR).exists() {
@@ -138,31 +138,29 @@ impl Pager {
         let hash_path = format!("{}/{}_{}.hash", Self::SWAP_DIR, app_id, safe_model);
 
         if Path::new(&hash_path).exists()
-            && let Ok(saved_hash) = fs::read_to_string(&hash_path) {
-                if saved_hash == current_fingerprint {
-                    if Path::new(&tensor_path).exists() {
-                        match candle_core::safetensors::load(&tensor_path, device) {
-                            Ok(tensors) => {
-                                kprintln!(
-                                    "-> [PAGER] Agent '{}' KV-Cache paged IN from SSD.",
-                                    app_id
-                                );
-                                return Some(tensors);
-                            }
-                            Err(e) => {
-                                kprintln!(
-                                    "-> [PAGER] [WARN] Failed to load KV-Cache: {}. Falling back to JSON History.",
-                                    e
-                                );
-                            }
+            && let Ok(saved_hash) = fs::read_to_string(&hash_path)
+        {
+            if saved_hash == current_fingerprint {
+                if Path::new(&tensor_path).exists() {
+                    match candle_core::safetensors::load(&tensor_path, device) {
+                        Ok(tensors) => {
+                            kprintln!("-> [PAGER] Agent '{}' KV-Cache paged IN from SSD.", app_id);
+                            return Some(tensors);
+                        }
+                        Err(e) => {
+                            kprintln!(
+                                "-> [PAGER] [WARN] Failed to load KV-Cache: {}. Falling back to JSON History.",
+                                e
+                            );
                         }
                     }
-                } else {
-                    println!(
-                        "-> [PAGER] Context Fingerprint MISMATCH. History was altered. Forcing Cold Start."
-                    );
                 }
+            } else {
+                println!(
+                    "-> [PAGER] Context Fingerprint MISMATCH. History was altered. Forcing Cold Start."
+                );
             }
+        }
         None
     }
 

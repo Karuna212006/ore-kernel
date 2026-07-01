@@ -20,7 +20,7 @@ def main():
 
     print("=" * 60)
     print("  ORE Stateful Chat")
-    print("  Powered by SSD Pager (swap/openclaw.json)")
+    print("  Powered by SSD Pager (memory/openclaw.json)")
     print()
     print("  Your conversation is saved to disk automatically.")
     print("  It survives kernel restarts.")
@@ -61,11 +61,11 @@ def main():
             continue
 
         # The /ask route automatically handles:
-        #   1. Page-in previous history from swap/openclaw.json
+        #   1. Page-in previous history from memory/openclaw.json
         #   2. Run through the Context Firewall
         #   3. Append this message to history
         #   4. Generate response with full context
-        #   5. Page-out updated history to swap/openclaw.json
+        #   5. Page-out updated history to memory/openclaw.json
         try:
             response = ore.ask(user_input)
             print(f"Bot > {response}\n")

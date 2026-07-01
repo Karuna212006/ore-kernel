@@ -17,8 +17,8 @@ use super::nn::kv_cache::ConcatKvCache;
 use super::transformers::quantized_nn::RmsNorm;
 use super::utils::repeat_kv;
 use super::utils::with_tracing::QMatMul;
+use crate::memory::ContextMessage;
 use crate::native::engine::{ModelConfig, OreEngine};
-use crate::swap::ContextMessage;
 
 pub fn load<R: Read + Seek>(
     _model_name: &str,
@@ -563,14 +563,15 @@ impl ModelWeights {
             let c = &mut layer.self_attn.kv_cache;
 
             if c.current_seq_len() > len
-                && let Some((k, v)) = c.get_tensors() {
-                    let dim = c.dim();
-                    c.set_tensors(
-                        // CRITICAL: .contiguous() prevents SSD Safetensor corruption!
-                        k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                        v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
-                    );
-                }
+                && let Some((k, v)) = c.get_tensors()
+            {
+                let dim = c.dim();
+                c.set_tensors(
+                    // CRITICAL: .contiguous() prevents SSD Safetensor corruption!
+                    k.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                    v.narrow(dim, 0, len).unwrap().contiguous().unwrap(),
+                );
+            }
         }
     }
 }
