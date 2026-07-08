@@ -184,6 +184,41 @@ SUCCESS: Memory for Agent 'my_agent' manually compacted.
 
 ---
 
+### `POST /execute`
+
+Executes a pre-compiled `.wasm` tool in the Zero-Trust Sandbox.
+
+```bash
+curl -X POST \
+     -H "Authorization: Bearer $(cat ore-kernel.token)" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "app_id": "openclaw",
+       "tool_name": "file_search",
+       "args": ["--path", "/workspace"]
+     }' \
+     http://127.0.0.1:6767/execute
+```
+
+**Request Body:**
+```json
+{
+  "app_id": "openclaw",
+  "tool_name": "file_search",
+  "args": ["--path", "/workspace"]
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `app_id` | string | ✅ | App manifest ID defining permissions (`can_execute_wasm`) |
+| `tool_name` | string | ✅ | Name of the tool in the `/tools` directory (must be in `allowed_tools`) |
+| `args` | string[] | ✅ | Command-line arguments to pass to the tool |
+
+**Response:** Captured stdout and stderr from the tool execution.
+
+---
+
 
 ## Inference Routes
 
@@ -210,13 +245,14 @@ Streamed inference with rate limiting. Returns tokens as a `text/event-stream`.
 curl -X POST \
      -H "Authorization: Bearer $(cat ore-kernel.token)" \
      -H "Content-Type: application/json" \
-     -d '{"model": "qwen2.5:0.5b", "prompt": "Explain ownership in Rust"}' \
+     -d '{"app_id": "my_agent", "model": "qwen2.5:0.5b", "prompt": "Explain ownership in Rust"}' \
      http://127.0.0.1:6767/run
 ```
 
 **Request Body:**
 ```json
 {
+  "app_id": "my_agent",
   "model": "qwen2.5:0.5b",
   "prompt": "Explain ownership in Rust"
 }

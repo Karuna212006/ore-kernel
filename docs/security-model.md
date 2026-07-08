@@ -166,6 +166,23 @@ An agent cannot read from, write to, or search a semantic pipe unless that pipe 
 
 ---
 
+### Layer 6: Sandboxed Tool Execution (WASM)
+
+**Source:** [`ore-core/src/sandbox.rs`](../ore-core/src/sandbox.rs)
+
+When agents need to interact with the host system (e.g., executing commands or reading files), ORE forces execution through the **Console-Cartridge WASM Sandbox**, providing mathematical guarantees of host safety:
+
+1. **Deterministic CPU Profiling (Fuel Limit):**
+   The sandbox injects a strict `50,000,000` instruction fuel limit via `wasmtime`. If the executed AI tool enters an infinite loop or attempts to hog the CPU, the sandbox automatically halts execution with an `Out of Fuel` trap.
+2. **Capability-Based File System (cap-std):**
+   The sandbox is completely blind to the `C:/` drive. It uses `cap-std` to safely map only manifest-approved host directories to an isolated `/workspace` guest path. 
+3. **I/O Trapping:**
+   Stdout and Stderr are caught by in-memory `WritePipes`, preventing rogue tools from hijacking the terminal output. Output is safely extracted and returned in the HTTP API response.
+4. **Manifest Enforcement:**
+   Execution is structurally blocked unless the agent's manifest sets `can_execute_wasm = true` and the specific `.wasm` tool is listed in `allowed_tools`.
+
+---
+
 ## Live Threat Examples
 
 ```
