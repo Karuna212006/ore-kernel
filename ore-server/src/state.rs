@@ -1,6 +1,7 @@
 use ore_core::driver::InferenceDriver;
 use ore_core::ipc::{MessageBus, RateLimiter, SemanticBus};
 use ore_core::registry::AppRegistry;
+use ore_core::sandbox::WasmSandbox;
 use ore_core::scheduler::GpuScheduler;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -41,4 +42,5 @@ pub struct KernelState {
     pub rate_limiter: RateLimiter,
     pub auth_token: String,
     pub system_embedder: String,
+    pub sandbox: Arc<WasmSandbox>,
 }

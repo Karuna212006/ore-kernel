@@ -43,3 +43,10 @@ pub struct SearchResult {
     pub source_app: String,
     pub timestamp: u64,
 }
+
+#[derive(serde::Deserialize)]
+pub struct ExecuteRequest {
+    pub app_id: String,
+    pub tool_name: String,
+    pub args: Vec<String>,
+}

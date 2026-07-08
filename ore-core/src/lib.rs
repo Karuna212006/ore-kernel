@@ -27,4 +27,5 @@ pub mod ipc;
 pub mod memory;
 pub mod native;
 pub mod registry;
+pub mod sandbox;
 pub mod scheduler;

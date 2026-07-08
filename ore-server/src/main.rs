@@ -20,6 +20,7 @@ use ore_core::ipc::{MessageBus, RateLimiter, SemanticBus};
 use ore_core::kprintln;
 use ore_core::native::NativeDriver;
 use ore_core::registry::AppRegistry;
+use ore_core::sandbox::WasmSandbox;
 use ore_core::scheduler::GpuScheduler;
 
 use crate::middleware::auth_middleware;
@@ -54,6 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let shared_semantic_bus = Arc::new(semantic_bus);
 
+    let sandbox = WasmSandbox::new().expect("FATAL: Failed to boot WASM Sandbox");
+    let shared_sandbox = Arc::new(sandbox);
+
     // configuration
     let shared_state = Arc::new(KernelState {
         driver,
@@ -65,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         rate_limiter: RateLimiter::new(),
         auth_token: session_token,
         system_embedder: config.system.embedder.clone(),
+        sandbox: shared_sandbox,
     });
 
     let app = Router::new()
@@ -86,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/ipc/search", post(handlers::ipc::sys_search_context))
         .route("/ipc/send", post(handlers::ipc::ipc_send))
         .route("/ipc/listen/:app_id", get(handlers::ipc::ipc_listen))
+        .route("/execute", post(handlers::system::execute_tool))
         .layer(axum_middleware::from_fn_with_state(
             shared_state.clone(),
             auth_middleware,

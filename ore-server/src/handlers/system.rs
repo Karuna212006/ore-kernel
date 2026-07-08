@@ -1,7 +1,10 @@
+use crate::payloads::ExecuteRequest;
 use crate::state::KernelState;
-use axum::extract::{Path, State};
+use axum::extract::{Json, Path, State};
 use ore_core::kprintln;
 use ore_core::memory::Pager;
+use ore_core::sandbox::ExecuteParams;
+use std::fs;
 use std::sync::Arc;
 
 pub async fn health_check(State(state): State<Arc<KernelState>>) -> String {
@@ -9,6 +12,84 @@ pub async fn health_check(State(state): State<Arc<KernelState>>) -> String {
         "ORE Kernel is ALIVE. Powered by: {}",
         state.driver.engine_name()
     )
+}
+
+pub async fn execute_tool(
+    State(state): State<Arc<KernelState>>,
+    Json(payload): Json<ExecuteRequest>,
+) -> String {
+    kprintln!(
+        "-> [EXECUTION] Agent '{}' requested to run tool '{}'",
+        payload.app_id,
+        payload.tool_name
+    );
+
+    let manifest = match state.registry.get_app(&payload.app_id) {
+        Some(m) => m,
+        None => {
+            return format!(
+                "KERNEL ALERT: Unregistered Agent '{}'. Access Denied.",
+                payload.app_id
+            )
+        }
+    };
+
+    if !manifest.execution.can_execute_wasm {
+        kprintln!(
+            "-> [BLOCKED] Agent '{}' lacks WASM execution permissions.",
+            manifest.app_id
+        );
+        return "KERNEL ALERT: Permission Denied. can_execute_wasm is false in manifest."
+            .to_string();
+    }
+
+    if !manifest
+        .execution
+        .allowed_tools
+        .contains(&payload.tool_name)
+    {
+        kprintln!(
+            "-> [BLOCKED] Tool '{}' is not in allowed_tools list.",
+            payload.tool_name
+        );
+        return format!(
+            "KERNEL ALERT: Tool '{}' is not whitelisted in manifest.",
+            payload.tool_name
+        );
+    }
+
+    // LOAD THE CARTRIDGE ("The Console-Cartridge Architecture")
+    // We look for the pre-compiled .wasm file in a local /tools directory
+    let tool_path = format!("../tools/{}.wasm", payload.tool_name);
+    if !std::path::Path::new(&tool_path).exists() {
+        return format!(
+            "KERNEL ERROR: Tool binary '{}.wasm' not found on host.",
+            payload.tool_name
+        );
+    }
+
+    let wasm_binary = match fs::read(&tool_path) {
+        Ok(b) => b,
+        Err(e) => return format!("KERNEL ERROR: Failed to read tool binary: {}", e),
+    };
+
+    let params = ExecuteParams {
+        wasm_binary,
+        fuel_limit: 50_000_000, // 50 Million CPU Instructions.
+        args: payload.args,
+        allowed_read_paths: manifest.file_system.allowed_read_paths.clone(),
+    };
+
+    match state.sandbox.execute(params) {
+        Ok(output) => {
+            kprintln!("-> [EXECUTION SUCCESS] Output returned to Agent.");
+            output
+        }
+        Err(e) => {
+            kprintln!("-> [EXECUTION FAILED] {}", e);
+            format!("KERNEL ERROR: {}", e)
+        }
+    }
 }
 
 pub async fn process_status(State(state): State<Arc<KernelState>>) -> String {
@@ -207,7 +288,7 @@ pub async fn compact_memory(
     State(state): State<Arc<KernelState>>,
     Path(app_id): Path<String>,
 ) -> String {
-    println!(
+    kprintln!(
         "-> [KERNEL COMMAND] Manual Memory Compaction triggered for Agent '{}'",
         app_id
     );
@@ -328,7 +409,7 @@ pub async fn top_telemetry(State(state): State<Arc<KernelState>>) -> String {
 }
 
 pub async fn kill_app(State(state): State<Arc<KernelState>>, Path(app_id): Path<String>) -> String {
-    ore_core::kprintln!(
+    kprintln!(
         "-> [KERNEL COMMAND] SIGTERM received for Agent '{}'",
         app_id
     );
