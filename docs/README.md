@@ -33,7 +33,6 @@ Deep-dives into each subsystem for contributors who want to understand ORE's bra
 
 ```
 ore-system/
-├── ore-common/     Shared types (InferenceRequest, InferenceResponse, ModelId)
 ├── ore-core/       Kernel logic (firewall, scheduler, IPC, drivers, native engine)
 ├── ore-server/     Axum HTTP daemon (routes, auth middleware, state)
 └── ore-cli/        Interactive CLI tool (clap + dialoguer + HuggingFace Hub)

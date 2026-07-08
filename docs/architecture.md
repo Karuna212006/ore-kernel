@@ -136,9 +136,6 @@ Client (curl / CLI / App)
 ## Crate Dependency Graph
 
 ```
-ore-common          (shared types: InferenceRequest, InferenceResponse, ModelId)
-    ▲
-    │
 ore-core            (kernel logic: firewall, scheduler, IPC, drivers, native engine)
     ▲
     │
@@ -149,7 +146,6 @@ ore-cli             (standalone CLI binary, talks to ore-server via HTTP)
 
 | Crate | Role | Key Dependencies |
 |---|---|---|
-| `ore-common` | Wire types shared between crates | `serde`, `uuid` |
 | `ore-core` | All kernel logic lives here | `tokio`, `dashmap`, `candle-*`, `regex`, `async-trait` |
 | `ore-server` | HTTP interface to the kernel | `axum`, `tokio`, `ore-core` |
 | `ore-cli` | Interactive command-line client | `clap`, `dialoguer`, `reqwest`, `hf-hub` |
@@ -158,7 +154,6 @@ ore-cli             (standalone CLI binary, talks to ore-server via HTTP)
 
 ```
 ore-system/
-├── ore-common/              Shared types
 ├── ore-core/                Kernel logic
 │   ├── driver.rs            HAL trait (InferenceDriver)
 │   ├── firewall.rs          Context firewall (PII, injection, boundary)

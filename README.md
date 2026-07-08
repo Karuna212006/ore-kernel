@@ -309,7 +309,6 @@ ORE is organized as a Rust workspace with four crates:
 
 ```
 ore-system/
-├── ore-common/              # Shared types (InferenceRequest, InferenceResponse, ModelId)
 ├── ore-core/                # Kernel logic
 │   ├── driver.rs            #   ├── HAL trait (InferenceDriver) + shared types
 │   ├── firewall.rs          #   ├── Context firewall (PII, injection, boundary)
